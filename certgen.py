@@ -11,10 +11,12 @@ import json
 import argparse
 import re
 import time
+import datetime
 
 
 KEY_TYPE = crypto.TYPE_RSA
 KEY_LEN = 4096
+MAX_TIME_TO_EXPIRE = 30*24*60*60
 
 def print_info(msg):
     if DEBUG:
@@ -70,6 +72,11 @@ def key_match(obj, key):
     ).decode("utf-8")
     return obj_pubkey_str == key_pubkey_str
 
+def get_time(timestamp):
+    time_str = timestamp.decode("utf-8")
+    time = int(timestamp[0:4])
+    time = time*364 + int(timestamp[4:])
+
 
 class Certgen:
     def __init__(self, sn, cert_dir, digest_fnc, auth_address, auth_port):
@@ -95,31 +102,38 @@ class Certgen:
 
         while True:
             print_debug("INIT state")
-            # check for private key
             if not self.key:
                 if os.path.exists(self.key_path):
                     print_info("Private key file exists.")
-                    with open(self.key_path,"r") as key_file:
-                        key = crypto.load_privatekey(
-                            crypto.FILETYPE_PEM,
-                            key_file.read()
-                        )
+                    try:
+                        with open(self.key_path,"r") as key_file:
+                            key = crypto.load_privatekey(
+                                crypto.FILETYPE_PEM,
+                                key_file.read()
+                            )
+                    except crypto.Error:
+                        print_info("Private key is inconsistent, "
+                            "generating a new one.")
+                        self.clear_cert_dir()
+                        self.generate_Pkey()
+                        continue
                     if key.check():
-                        self.key = key
+                            self.key = key
+                            print_info("Private key loaded.")
                     else:
                         print_info("Private key is inconsistent, "
-                            "generating new key + csr")
+                            "generating a new one.")
                         self.clear_cert_dir()
                         self.generate_Pkey()
                         continue
 
                 else:
-                    print_info("Private key file not found, "
-                        "generating new key + csr")
+                    print_info("Private key file not found")
+                    print_info("Private key: generating a new one.")
                     self.clear_cert_dir()
                     self.generate_Pkey()
                     continue
-            # check for certificate
+
             if os.path.exists(self.cert_path):
                 print_info("Certificate file exists.")
                 try:
@@ -132,9 +146,21 @@ class Certgen:
                     print_info("Certificate file broken. Re-certifying...")
                     os.remove(self.cert_path)
                     continue
+                due_date = time.mktime(datetime.datetime.strptime(
+                    cert.get_notAfter().decode("utf-8"),
+                    "%Y%m%d%H%M%SZ",
+                ).timetuple())
+                now = time.time()
+                if (due_date - now < MAX_TIME_TO_EXPIRE):
+                    print_info("Certificate is about to expire. "
+                        "Re-certifying..")
+                    self.key = None
+                    self.clear_cert_dir()
+                    continue
+                else:
+                    print_info("Certificate not expired.")
                 if key_match(cert, self.key):
                     self.cert = cert
-                    #TODO check expiration
                     print_info("Certificate loaded.")
                     break
                 else:
@@ -145,22 +171,29 @@ class Certgen:
 
             else:
                 print_info("Certificate file does not exist. Re-certyfing.")
-                # check for CSR - when needed
                 if os.path.exists(self.csr_path):
                     print_info("CSR file exist.")
-                    with open(self.csr_path,"r") as csr_file:
-                        csr = crypto.load_certificate_request(
-                            crypto.FILETYPE_PEM,
-                            csr_file.read()
-                        )
+                    try:
+                        with open(self.csr_path,"r") as csr_file:
+                            csr = crypto.load_certificate_request(
+                                crypto.FILETYPE_PEM,
+                                csr_file.read()
+                            )
+                    except crypto.Error:
+                        print_info("CSR file is inconsistent, "
+                            "generating a new one.")
+                        os.remove(self.csr_path)
+                        self.generate_csr()
+                        continue
+
                     if key_match(csr, self.key):
                         self.csr = csr
                         print_info("CSR loaded.")
                         while (not self.set_state_get()):
                             pass
                     else:
-                        print_info("CSR public key does not match. "
-                            "Generating new CSR.")
+                        print_info("CSR public key does not match, "
+                            "generating a new one.")
                         os.remove(self.csr_path)
                         self.generate_csr()
                         continue
