@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 from OpenSSL import crypto, SSL
 import os
 import pwd
 import subprocess
 import sys
-import urllib.request
+import urllib2
 import ssl
 import json
 import argparse
@@ -25,30 +25,6 @@ def print_debug(msg):
         print('\033[93m' + msg + '\033[0m')
     return DEBUG
 
-def send_request(req_json):
-    # Creating GET request to obtain / check uuid
-    req = urllib.request.Request(
-            "https://localhost:5000"
-    )
-    req.add_header('Accept', 'application/json')
-    req.add_header('Content-Type', 'application/json')
-    data = json.dumps(req_json).encode('utf8')
-
-    # create ssl context
-    ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ctx.verify_mode = ssl.CERT_REQUIRED
-    ctx.set_default_verify_paths()
-    ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-    ctx.load_verify_locations("ca.pem")
-
-    resp = urllib.request.urlopen(req, data, context=ctx)
-
-    resp_json = resp.read()
-    #print(resp.geturl())
-    #print(resp.info())
-    #print(resp.getcode())
-
-    return resp_json
 
 def hexa_match(string):
     """ Check whether the string contains only hexadecimal characters
@@ -69,6 +45,10 @@ def prepare_arg_parser():
         '16-digit hexadecimal number.')
     parser.add_argument('--certdir', nargs=1, help='path to Sentinel '\
         'certificate location', required=True)
+    parser.add_argument('--auth-api-address', nargs=1, help='authentication '\
+        'api address', required=True)
+    parser.add_argument('--auth-api-port', nargs=1, help='authentication '\
+        'api port', required=True)
     parser.add_argument('--debug', action='store_true', help='enable debug '\
         'printouts')
     parser.add_argument('--force-renew', action='store_true', help='remove '\
@@ -92,10 +72,12 @@ def key_match(obj, key):
 
 
 class Certgen:
-    def __init__(self, sn, cert_dir, digest_fnc):
+    def __init__(self, sn, cert_dir, digest_fnc, auth_address, auth_port):
         self.sn = sn
         self.cert_dir = cert_dir
         self.get_digest = digest_fnc
+        self.auth_address = auth_address
+        self.auth_port = auth_port
         self.set_state_init()
 
     def set_state_init(self):
@@ -113,6 +95,7 @@ class Certgen:
 
         while True:
             print_debug("INIT state")
+            # check for private key
             if not self.key:
                 if os.path.exists(self.key_path):
                     print_info("Private key file exists.")
@@ -127,14 +110,16 @@ class Certgen:
                         print_info("Private key is inconsistent, "
                             "generating new key + csr")
                         self.clear_cert_dir()
+                        self.generate_Pkey()
                         continue
 
                 else:
                     print_info("Private key file not found, "
                         "generating new key + csr")
                     self.clear_cert_dir()
+                    self.generate_Pkey()
                     continue
-
+            # check for certificate
             if os.path.exists(self.cert_path):
                 print_info("Certificate file exists.")
                 try:
@@ -160,6 +145,7 @@ class Certgen:
 
             else:
                 print_info("Certificate file does not exist. Re-certyfing.")
+                # check for CSR - when needed
                 if os.path.exists(self.csr_path):
                     print_info("CSR file exist.")
                     with open(self.csr_path,"r") as csr_file:
@@ -190,7 +176,6 @@ class Certgen:
             type=crypto.FILETYPE_PEM,
             req=self.csr
         ).decode("utf-8")
-
         req = {
             "api_version" : "0.1",
             "type" : "get_cert",
@@ -199,7 +184,7 @@ class Certgen:
             "csr" : csr_str,
         }
 
-        recv = send_request(req)
+        recv = self.send_request(req)
         recv_json = json.loads(recv.decode("utf-8"))
 
         if recv_json.get("status") == 'ok':
@@ -242,7 +227,7 @@ class Certgen:
             "digest" : self.digest,
         }
 
-        recv = send_request(req)
+        recv = self.send_request(req)
         recv_json = json.loads(recv.decode("utf-8"))
         if recv_json.get("status") == "accepted":
             print_info("Auth accepted, sleeping for {} sec.".format(
@@ -276,14 +261,13 @@ class Certgen:
             ).decode("utf-8"))
 
     def generate_csr(self):
-        #TODO doplnit udaje k certu
         csr = crypto.X509Req()
         csr.get_subject().CN = self.sn
         csr.get_subject().countryName = "cz"
-        csr.get_subject().stateOrProvinceName = "cz"
-        csr.get_subject().localityName = "cz"
-        csr.get_subject().organizationName = "cz"
-        csr.get_subject().organizationalUnitName = "cz"
+        csr.get_subject().stateOrProvinceName = "Prague"
+        csr.get_subject().localityName = "Prague"
+        csr.get_subject().organizationName = "CZ.NIC"
+        csr.get_subject().organizationalUnitName = "Turris"
 
         # Add in extensions
         x509_extensions = ([
@@ -315,6 +299,28 @@ class Certgen:
                 cert=cert
             ).decode("utf-8"))
 
+    def send_request(self, req_json):
+        # Creating GET request to obtain / check uuid
+        req = urllib2.Request(
+                "{}:{}".format(self.auth_address, self.auth_port)
+        )
+        req.add_header('Accept', 'application/json')
+        req.add_header('Content-Type', 'application/json')
+        data = json.dumps(req_json).encode('utf8')
+
+        # create ssl context
+        ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.set_default_verify_paths()
+        ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+        ctx.load_verify_locations("ca.pem")
+        resp = urllib2.urlopen(req, data, context=ctx)
+        resp_json = resp.read()
+        #print(resp.geturl())
+        #print(resp.info())
+        #print(resp.getcode())
+
+        return resp_json
 parser = prepare_arg_parser()
 args = parser.parse_args()
 DEBUG = args.debug
@@ -322,11 +328,17 @@ DEBUG = args.debug
 if args.debug_sn:
     sn = args.debug_sn[0]
 else:
-    # TODO: atcha!!
-    print("ATCHA")
-    exit()
+    process = subprocess.Popen(
+        ["atsha204cmd", "serial-number"],
+        stdout=subprocess.PIPE
+    )
+    if process.wait() == 0:
+        sn = process.stdout.read()[:-1]
+    else:
+        print("Atcha failed.")
+        exit()
 
-certgen = Certgen(sn, args.certdir[0], get_digest_debug)
+certgen = Certgen(sn, args.certdir[0], get_digest_debug, args.auth_api_address[0], args.auth_api_port[0])
 
 
 
