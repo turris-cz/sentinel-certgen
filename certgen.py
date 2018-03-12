@@ -124,9 +124,13 @@ class Certgen:
         self.cert = None
         self.sid = 0
 
+        # We check existence and validity of private key and certificate
+        # Every iteration of this loop checks another component and based on
+        # the validations results it removes, acknowledges or creates it
+        # In the final loop all the components are loaded from files.
         while True:
             root_logger.debug("---> INIT state")
-            if not self.key:
+            if not self.key:  # private key is not loaded in Certgen
                 if os.path.exists(self.key_path):
                     root_logger.debug("Private key file exists.")
                     try:
