@@ -25,6 +25,8 @@ def hexa_match(string):
 
 
 def serial(string):
+    """ Value-checking for argument parser.
+    """
     if len(string) != 16 or not hexa_match(string):
         raise argparse.ArgumentTypeError(
             "Serial number must be 16 character long hexadecimal number"
@@ -33,6 +35,8 @@ def serial(string):
 
 
 def get_arg_parser():
+    """ Returns argument parser object.
+    """
     parser = argparse.ArgumentParser(
         description='Certgen - client for retrieving Turris:Sentinel '
         ' certificates'
@@ -78,6 +82,9 @@ def get_arg_parser():
 
 
 def key_match(obj, key):
+    """ Compares two public keys in different formats and returns true if they
+    match.
+    """
     obj_pubkey_str = crypto.dump_publickey(
         type=crypto.FILETYPE_PEM,
         pkey=obj.get_pubkey(),
@@ -110,6 +117,10 @@ class Certgen:
         )
 
     def set_state_init(self):
+        """ Initial state. Checking existance and validity of the private key
+        and certificate. If something of this fail, new CSR (certificate sign
+        request) is created and state GET is set.
+        """
         self.key_path = self.get_crypto_name("key")
         self.csr_path = self.get_crypto_name("csr")
         self.cert_path = self.get_crypto_name("pem")
@@ -233,6 +244,10 @@ class Certgen:
                     continue
 
     def set_state_get(self):
+        """ In this state, certificate is being requested using CSR. If no
+        certificate that corresponds to the CSR exists, new certificate must
+        be generated - to resolve this Certgen is switched to the AUTH state.
+        """
         root_logger.debug("---> GET state")
         csr_str = crypto.dump_certificate_request(
             type=crypto.FILETYPE_PEM,
@@ -279,6 +294,10 @@ class Certgen:
             root_logger.debug("Get: Unknown error.")
 
     def set_state_auth(self):
+        """ In this state we get a nonce andi, using Atcha, generate digest.
+        The digest is sent to the cert-api to complete the authentication and
+        certificate creation.
+        """
         root_logger.debug("---> AUTH state")
         self.digest = self.get_digest(self.nonce)
         req = {
@@ -354,6 +373,8 @@ class Certgen:
             ).decode("utf-8"))
 
     def save_cert(self, cert):
+        """ Save received certificate to a file.
+        """
         with open(self.cert_path, "w") as cert_file:
             cert_file.write(crypto.dump_certificate(
                 type=crypto.FILETYPE_PEM,
@@ -361,6 +382,8 @@ class Certgen:
             ).decode("utf-8"))
 
     def send_request(self, req_json):
+        """ Send http POST request.
+        """
         # Creating GET request to obtain / check uuid
         req = urllib2.Request(
                 "{}:{}".format(self.auth_address, self.auth_port)
@@ -415,6 +438,7 @@ if __name__ == "__main__":
         else:
             logging.critical("Atcha failed: sn")
             exit()
+
     certgen = Certgen(
             sn, args.certdir[0], args.auth_api_address[0],
             args.auth_api_port[0])
