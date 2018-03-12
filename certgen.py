@@ -63,9 +63,10 @@ def get_arg_parser():
         help='authentication api port'
     )
     parser.add_argument(
-        '--debug',
-        action='store_true',
-        help='enable debug printouts'
+        '--console-log',
+        type=int,
+        choices=range(1, 51),
+        help='Enables logging to console for the level 1..50'
     )
     parser.add_argument(
         '--force-renew',
@@ -120,10 +121,10 @@ class Certgen:
         self.sid = 0
 
         while True:
-            logging.debug("---> INIT state")
+            root_logger.debug("---> INIT state")
             if not self.key:
                 if os.path.exists(self.key_path):
-                    logging.debug("Private key file exists.")
+                    root_logger.debug("Private key file exists.")
                     try:
                         with open(self.key_path, "r") as key_file:
                             key = crypto.load_privatekey(
@@ -131,7 +132,7 @@ class Certgen:
                                 key_file.read()
                             )
                     except crypto.Error:
-                        logging.debug(
+                        root_logger.debug(
                            "Private key is inconsistent, generating a new one."
                         )
                         self.clear_cert_dir()
@@ -139,9 +140,9 @@ class Certgen:
                         continue
                     if key.check():
                             self.key = key
-                            logging.debug("Private key loaded.")
+                            root_logger.debug("Private key loaded.")
                     else:
-                        logging.debug(
+                        root_logger.debug(
                            "Private key is inconsistent, generating a new one."
                         )
                         self.clear_cert_dir()
@@ -149,14 +150,14 @@ class Certgen:
                         continue
 
                 else:
-                    logging.debug("Private key file not found")
-                    logging.debug("Private key: generating a new one.")
+                    root_logger.debug("Private key file not found")
+                    root_logger.debug("Private key: generating a new one.")
                     self.clear_cert_dir()
                     self.generate_priv_key()
                     continue
 
             if os.path.exists(self.cert_path):
-                logging.debug("Certificate file exists.")
+                root_logger.debug("Certificate file exists.")
                 try:
                     with open(self.cert_path, "r") as cert_file:
                         cert = crypto.load_certificate(
@@ -164,7 +165,7 @@ class Certgen:
                             cert_file.read()
                         )
                 except crypto.Error:
-                    logging.debug("Certificate file broken. Re-certifying...")
+                    root_logger.debug("Certificate file broken. Re-certifying...")
                     os.remove(self.cert_path)
                     continue
                 due_date = time.mktime(datetime.datetime.strptime(
@@ -173,20 +174,20 @@ class Certgen:
                 ).timetuple())
                 now = time.time()
                 if (due_date - now < MAX_TIME_TO_EXPIRE):
-                    logging.debug(
+                    root_logger.debug(
                         "Certificate is about to expire. Re-certifying.."
                     )
                     self.key = None
                     self.clear_cert_dir()
                     continue
                 else:
-                    logging.debug("Certificate not expired.")
+                    root_logger.debug("Certificate not expired.")
                 if key_match(cert, self.key):
                     self.cert = cert
-                    logging.debug("Certificate loaded.")
+                    root_logger.debug("Certificate loaded.")
                     break
                 else:
-                    logging.debug(
+                    root_logger.debug(
                         "Certificate public key does not match. "
                         "Re-certifying..."
                     )
@@ -194,9 +195,9 @@ class Certgen:
                     continue
 
             else:
-                logging.debug("Certificate file does not exist. Re-certyfing.")
+                root_logger.debug("Certificate file does not exist. Re-certyfing.")
                 if os.path.exists(self.csr_path):
-                    logging.debug("CSR file exist.")
+                    root_logger.debug("CSR file exist.")
                     try:
                         with open(self.csr_path, "r") as csr_file:
                             csr = crypto.load_certificate_request(
@@ -204,7 +205,7 @@ class Certgen:
                                 csr_file.read()
                             )
                     except crypto.Error:
-                        logging.debug(
+                        root_logger.debug(
                             "CSR file is inconsistent, generating a new one."
                         )
                         os.remove(self.csr_path)
@@ -213,11 +214,11 @@ class Certgen:
 
                     if key_match(csr, self.key):
                         self.csr = csr
-                        logging.debug("CSR loaded.")
+                        root_logger.debug("CSR loaded.")
                         while (not self.set_state_get()):
                             pass
                     else:
-                        logging.debug(
+                        root_logger.debug(
                             "CSR public key does not match, "
                             "generating a new one."
                         )
@@ -226,12 +227,12 @@ class Certgen:
                         continue
 
                 else:
-                    logging.debug("CSR file not found. Generating a new one.")
+                    root_logger.debug("CSR file not found. Generating a new one.")
                     self.generate_csr()
                     continue
 
     def set_state_get(self):
-        logging.debug("---> GET state")
+        root_logger.debug("---> GET state")
         csr_str = crypto.dump_certificate_request(
             type=crypto.FILETYPE_PEM,
             req=self.csr
@@ -254,29 +255,29 @@ class Certgen:
             )
             if key_match(cert, self.key):
                 self.save_cert(cert)
-                logging.debug("Saving obtained certificate.")
+                root_logger.debug("Saving obtained certificate.")
                 return True
             else:
-                logging.debug("Obtained cert key does not match.")
+                root_logger.debug("Obtained cert key does not match.")
                 return False
         elif recv_json.get("status") == 'wait':
-            logging.debug("Sleeping for {} seconds".format(recv_json['delay']))
+            root_logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
             time.sleep(recv_json['delay'])
         elif recv_json.get("status") == 'error':
-            logging.debug("Get Error.")
+            root_logger.debug("Get Error.")
             return False
         elif recv_json.get("status") == 'fail':
-            logging.debug("Get Fail.")
+            root_logger.debug("Get Fail.")
             return False
         elif recv_json.get("status") == 'authenticate':
             self.sid = recv_json['sid']
             self.nonce = recv_json['nonce']
             self.set_state_auth()
         else:
-            logging.debug("Get: Unknown error.")
+            root_logger.debug("Get: Unknown error.")
 
     def set_state_auth(self):
-        logging.debug("---> AUTH state")
+        root_logger.debug("---> AUTH state")
         self.digest = self.get_digest(self.nonce)
         req = {
             "api_version": "0.1",
@@ -289,18 +290,18 @@ class Certgen:
         recv = self.send_request(req)
         recv_json = json.loads(recv.decode("utf-8"))
         if recv_json.get("status") == "accepted":
-            logging.debug("Auth accepted, sleeping for {} sec.".format(
+            root_logger.debug("Auth accepted, sleeping for {} sec.".format(
                 recv_json['delay']
             ))
             time.sleep(recv_json['delay'])
         else:
-            logging.debug("Auth: Unknown error.")
+            root_logger.debug("Auth: Unknown error.")
 
     def clear_cert_dir(self):
         """ Remove (if exist) private and public keys and certificate
         sifning request from Sentinel certificate directory.
         """
-        logging.debug("Clearing certificate directory.")
+        root_logger.debug("Clearing certificate directory.")
 
         if os.path.exists(self.key_path):
             os.remove(self.key_path)
@@ -378,14 +379,18 @@ class Certgen:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        format='%(levelname)s:%(message)s',
-        level=logging.DEBUG
-    )
+    root_logger = logging.getLogger()
+    root_logger.setLevel('DEBUG')
+    root_logger.addHandler(logging.NullHandler())
 
     parser = get_arg_parser()
     args = parser.parse_args()
-    DEBUG = args.debug
+
+    if args.console_log:
+        cl = logging.StreamHandler()
+        cl.setLevel(args.console_log)
+        cl.formatter = logging.Formatter('%(levelname)s:%(message)s')
+        root_logger.addHandler(cl)
 
     if args.debug_sn:
         sn = args.debug_sn[0]
