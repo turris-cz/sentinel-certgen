@@ -96,11 +96,6 @@ def key_match(obj, key):
     return obj_pubkey_str == key_pubkey_str
 
 
-def get_time(timestamp):
-    time = int(timestamp[0:4])
-    time = time*364 + int(timestamp[4:])
-
-
 class Certgen:
     def __init__(self, sn, cert_dir, auth_address, auth_port):
         self.sn = sn
