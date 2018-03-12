@@ -32,34 +32,44 @@ def serial(string):
     return string
 
 
-def prepare_arg_parser():
+def get_arg_parser():
     parser = argparse.ArgumentParser(
         description='Certgen - client for retrieving Turris:Sentinel '
         ' certificates'
     )
     parser.add_argument(
-        '--debug-sn', nargs=1, type=serial,
+        '--debug-sn',
+        nargs=1,
+        type=serial,
         help='emulate serial number for debug purposes. DEBUG-SN is a '
         '16-digit hexadecimal number.'
     )
     parser.add_argument(
-        '--certdir', nargs=1,
-        help='path to Sentinel certificate location', required=True
+        '--certdir',
+        nargs=1,
+        required=True,
+        help='path to Sentinel certificate location'
     )
     parser.add_argument(
-        '--auth-api-address', nargs=1, help='authentication api address',
-        required=True
+        '--auth-api-address',
+        nargs=1,
+        required=True,
+        help='authentication api address'
     )
     parser.add_argument(
-        '--auth-api-port', nargs=1,
-        help='authentication api port', required=True
+        '--auth-api-port',
+        nargs=1,
+        required=True,
+        help='authentication api port'
     )
     parser.add_argument(
-        '--debug', action='store_true',
+        '--debug',
+        action='store_true',
         help='enable debug printouts'
     )
     parser.add_argument(
-        '--force-renew', action='store_true',
+        '--force-renew',
+        action='store_true',
         help='remove private key, generate a new one and ask '
         ' Sentinel:Authenticator for a new certificate'
     )
@@ -125,7 +135,7 @@ class Certgen:
                            "Private key is inconsistent, generating a new one."
                         )
                         self.clear_cert_dir()
-                        self.generate_Pkey()
+                        self.generate_priv_key()
                         continue
                     if key.check():
                             self.key = key
@@ -135,14 +145,14 @@ class Certgen:
                            "Private key is inconsistent, generating a new one."
                         )
                         self.clear_cert_dir()
-                        self.generate_Pkey()
+                        self.generate_priv_key()
                         continue
 
                 else:
                     logging.debug("Private key file not found")
                     logging.debug("Private key: generating a new one.")
                     self.clear_cert_dir()
-                    self.generate_Pkey()
+                    self.generate_priv_key()
                     continue
 
             if os.path.exists(self.cert_path):
@@ -299,7 +309,7 @@ class Certgen:
         if os.path.exists(self.cert_path):
             os.remove(self.cert_path)
 
-    def generate_Pkey(self):
+    def generate_priv_key(self):
         key = crypto.PKey()
         key.generate_key(KEY_TYPE, KEY_LEN)
         with open(self.key_path, "w") as key_file:
@@ -373,7 +383,7 @@ if __name__ == "__main__":
         level=logging.DEBUG
     )
 
-    parser = prepare_arg_parser()
+    parser = get_arg_parser()
     args = parser.parse_args()
     DEBUG = args.debug
 
