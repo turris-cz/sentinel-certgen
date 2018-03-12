@@ -77,10 +77,6 @@ def get_arg_parser():
     return parser
 
 
-def get_digest_debug(nonce):
-    return nonce
-
-
 def key_match(obj, key):
     obj_pubkey_str = crypto.dump_publickey(
         type=crypto.FILETYPE_PEM,
@@ -99,10 +95,9 @@ def get_time(timestamp):
 
 
 class Certgen:
-    def __init__(self, sn, cert_dir, digest_fnc, auth_address, auth_port):
+    def __init__(self, sn, cert_dir, auth_address, auth_port):
         self.sn = sn
         self.cert_dir = cert_dir
-        self.get_digest = digest_fnc
         self.auth_address = auth_address
         self.auth_port = auth_port
         self.set_state_init()
@@ -165,7 +160,8 @@ class Certgen:
                             cert_file.read()
                         )
                 except crypto.Error:
-                    root_logger.debug("Certificate file broken. Re-certifying...")
+                    root_logger.debug(
+                        "Certificate file broken. Re-certifying...")
                     os.remove(self.cert_path)
                     continue
                 due_date = time.mktime(datetime.datetime.strptime(
@@ -195,7 +191,8 @@ class Certgen:
                     continue
 
             else:
-                root_logger.debug("Certificate file does not exist. Re-certyfing.")
+                root_logger.debug(
+                    "Certificate file does not exist. Re-certyfing.")
                 if os.path.exists(self.csr_path):
                     root_logger.debug("CSR file exist.")
                     try:
@@ -227,7 +224,8 @@ class Certgen:
                         continue
 
                 else:
-                    root_logger.debug("CSR file not found. Generating a new one.")
+                    root_logger.debug(
+                        "CSR file not found. Generating a new one.")
                     self.generate_csr()
                     continue
 
@@ -261,7 +259,8 @@ class Certgen:
                 root_logger.debug("Obtained cert key does not match.")
                 return False
         elif recv_json.get("status") == 'wait':
-            root_logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
+            root_logger.debug(
+                "Sleeping for {} seconds".format(recv_json['delay']))
             time.sleep(recv_json['delay'])
         elif recv_json.get("status") == 'error':
             root_logger.debug("Get Error.")
@@ -377,6 +376,15 @@ class Certgen:
         resp_json = resp.read()
         return resp_json
 
+    def get_digest(self, nonce):
+        process = subprocess.Popen(
+            ["atsha204cmd", "challenge-response"],
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE
+        )
+        digest = process.communicate(input=nonce+'\n')[0]
+        return digest
+
 
 if __name__ == "__main__":
     root_logger = logging.getLogger()
@@ -402,8 +410,8 @@ if __name__ == "__main__":
         if process.wait() == 0:
             sn = process.stdout.read()[:-1]
         else:
-            logging.warning("Atcha failed.")
+            logging.critical("Atcha failed: sn")
             exit()
     certgen = Certgen(
-            sn, args.certdir[0], get_digest_debug, args.auth_api_address[0],
+            sn, args.certdir[0], args.auth_api_address[0],
             args.auth_api_port[0])
