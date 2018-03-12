@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 
-from OpenSSL import crypto, SSL
+from OpenSSL import crypto
 import os
-import pwd
 import subprocess
-import sys
 import urllib2
 import ssl
 import json
@@ -18,10 +16,13 @@ KEY_TYPE = crypto.TYPE_RSA
 KEY_LEN = 4096
 MAX_TIME_TO_EXPIRE = 30*24*60*60
 
+
 def print_info(msg):
     if DEBUG:
         print('\033[94m' + msg + '\033[0m')
     return DEBUG
+
+
 def print_debug(msg):
     if DEBUG:
         print('\033[93m' + msg + '\033[0m')
@@ -33,33 +34,52 @@ def hexa_match(string):
     """
     return not re.compile(r'[^a-fA-f0-9]').search(string)
 
+
 def serial(string):
     if len(string) != 16 or not hexa_match(string):
-        raise argparse.ArgumentTypeError("Serial number must be 16 character "\
-            "long hexadecimal number")
+        raise argparse.ArgumentTypeError(
+            "Serial number must be 16 character long hexadecimal number"
+        )
     return string
 
+
 def prepare_arg_parser():
-    parser = argparse.ArgumentParser(description='Certgen - client for '\
-        'retrieving Turris:Sentinel certificates')
-    parser.add_argument('--debug-sn', nargs=1, type=serial,
-        help='emulate serial number for debug purposes. DEBUG-SN is a '\
-        '16-digit hexadecimal number.')
-    parser.add_argument('--certdir', nargs=1, help='path to Sentinel '\
-        'certificate location', required=True)
-    parser.add_argument('--auth-api-address', nargs=1, help='authentication '\
-        'api address', required=True)
-    parser.add_argument('--auth-api-port', nargs=1, help='authentication '\
-        'api port', required=True)
-    parser.add_argument('--debug', action='store_true', help='enable debug '\
-        'printouts')
-    parser.add_argument('--force-renew', action='store_true', help='remove '\
-        'private key, generate a new one and ask Sentinel:Authenticator for'\
-        ' a new certificate')
+    parser = argparse.ArgumentParser(
+        description='Certgen - client for retrieving Turris:Sentinel '
+        ' certificates'
+    )
+    parser.add_argument(
+        '--debug-sn', nargs=1, type=serial,
+        help='emulate serial number for debug purposes. DEBUG-SN is a '
+        '16-digit hexadecimal number.'
+    )
+    parser.add_argument(
+        '--certdir', nargs=1,
+        help='path to Sentinel certificate location', required=True
+    )
+    parser.add_argument(
+        '--auth-api-address', nargs=1, help='authentication api address',
+        required=True
+    )
+    parser.add_argument(
+        '--auth-api-port', nargs=1,
+        help='authentication api port', required=True
+    )
+    parser.add_argument(
+        '--debug', action='store_true',
+        help='enable debug printouts'
+    )
+    parser.add_argument(
+        '--force-renew', action='store_true',
+        help='remove private key, generate a new one and ask '
+        ' Sentinel:Authenticator for a new certificate'
+    )
     return parser
+
 
 def get_digest_debug(nonce):
     return nonce
+
 
 def key_match(obj, key):
     obj_pubkey_str = crypto.dump_publickey(
@@ -72,8 +92,8 @@ def key_match(obj, key):
     ).decode("utf-8")
     return obj_pubkey_str == key_pubkey_str
 
+
 def get_time(timestamp):
-    time_str = timestamp.decode("utf-8")
     time = int(timestamp[0:4])
     time = time*364 + int(timestamp[4:])
 
@@ -106,14 +126,15 @@ class Certgen:
                 if os.path.exists(self.key_path):
                     print_info("Private key file exists.")
                     try:
-                        with open(self.key_path,"r") as key_file:
+                        with open(self.key_path, "r") as key_file:
                             key = crypto.load_privatekey(
                                 crypto.FILETYPE_PEM,
                                 key_file.read()
                             )
                     except crypto.Error:
-                        print_info("Private key is inconsistent, "
-                            "generating a new one.")
+                        print_info(
+                           "Private key is inconsistent, generating a new one."
+                        )
                         self.clear_cert_dir()
                         self.generate_Pkey()
                         continue
@@ -121,8 +142,9 @@ class Certgen:
                             self.key = key
                             print_info("Private key loaded.")
                     else:
-                        print_info("Private key is inconsistent, "
-                            "generating a new one.")
+                        print_info(
+                           "Private key is inconsistent, generating a new one."
+                        )
                         self.clear_cert_dir()
                         self.generate_Pkey()
                         continue
@@ -137,7 +159,7 @@ class Certgen:
             if os.path.exists(self.cert_path):
                 print_info("Certificate file exists.")
                 try:
-                    with open(self.cert_path,"r") as cert_file:
+                    with open(self.cert_path, "r") as cert_file:
                         cert = crypto.load_certificate(
                             crypto.FILETYPE_PEM,
                             cert_file.read()
@@ -152,8 +174,9 @@ class Certgen:
                 ).timetuple())
                 now = time.time()
                 if (due_date - now < MAX_TIME_TO_EXPIRE):
-                    print_info("Certificate is about to expire. "
-                        "Re-certifying..")
+                    print_info(
+                        "Certificate is about to expire. Re-certifying.."
+                    )
                     self.key = None
                     self.clear_cert_dir()
                     continue
@@ -164,8 +187,10 @@ class Certgen:
                     print_info("Certificate loaded.")
                     break
                 else:
-                    print_info("Certificate public key does not match. "
-                        "Re-certifying...")
+                    print_info(
+                        "Certificate public key does not match. "
+                        "Re-certifying..."
+                    )
                     os.remove(self.cert_path)
                     continue
 
@@ -174,14 +199,15 @@ class Certgen:
                 if os.path.exists(self.csr_path):
                     print_info("CSR file exist.")
                     try:
-                        with open(self.csr_path,"r") as csr_file:
+                        with open(self.csr_path, "r") as csr_file:
                             csr = crypto.load_certificate_request(
                                 crypto.FILETYPE_PEM,
                                 csr_file.read()
                             )
                     except crypto.Error:
-                        print_info("CSR file is inconsistent, "
-                            "generating a new one.")
+                        print_info(
+                            "CSR file is inconsistent, generating a new one."
+                        )
                         os.remove(self.csr_path)
                         self.generate_csr()
                         continue
@@ -192,8 +218,10 @@ class Certgen:
                         while (not self.set_state_get()):
                             pass
                     else:
-                        print_info("CSR public key does not match, "
-                            "generating a new one.")
+                        print_info(
+                            "CSR public key does not match, "
+                            "generating a new one."
+                        )
                         os.remove(self.csr_path)
                         self.generate_csr()
                         continue
@@ -210,11 +238,11 @@ class Certgen:
             req=self.csr
         ).decode("utf-8")
         req = {
-            "api_version" : "0.1",
-            "type" : "get_cert",
-            "sn" : self.sn,
-            "sid" : self.sid,
-            "csr" : csr_str,
+            "api_version": "0.1",
+            "type": "get_cert",
+            "sn": self.sn,
+            "sid": self.sid,
+            "csr": csr_str,
         }
 
         recv = self.send_request(req)
@@ -239,7 +267,7 @@ class Certgen:
             print_info("Get Error.")
             return False
         elif recv_json.get("status") == 'fail':
-            print_infog("Get Fail.")
+            print_info("Get Fail.")
             return False
         elif recv_json.get("status") == 'authenticate':
             self.sid = recv_json['sid']
@@ -248,16 +276,15 @@ class Certgen:
         else:
             print_info("Get: Unknown error.")
 
-
     def set_state_auth(self):
         print_debug("AUTH state")
         self.digest = self.get_digest(self.nonce)
         req = {
-            "api_version" : "0.1",
-            "type" : "auth",
-            "sn" : self.sn,
-            "sid" : self.sid,
-            "digest" : self.digest,
+            "api_version": "0.1",
+            "type": "auth",
+            "sn": self.sn,
+            "sid": self.sid,
+            "digest": self.digest,
         }
 
         recv = self.send_request(req)
@@ -282,7 +309,6 @@ class Certgen:
             os.remove(self.csr_path)
         if os.path.exists(self.cert_path):
             os.remove(self.cert_path)
-
 
     def generate_Pkey(self):
         key = crypto.PKey()
@@ -349,29 +375,30 @@ class Certgen:
         ctx.load_verify_locations("ca.pem")
         resp = urllib2.urlopen(req, data, context=ctx)
         resp_json = resp.read()
-        #print(resp.geturl())
-        #print(resp.info())
-        #print(resp.getcode())
+        # print(resp.geturl())
+        # print(resp.info())
+        # print(resp.getcode())
 
         return resp_json
-parser = prepare_arg_parser()
-args = parser.parse_args()
-DEBUG = args.debug
 
-if args.debug_sn:
-    sn = args.debug_sn[0]
-else:
-    process = subprocess.Popen(
-        ["atsha204cmd", "serial-number"],
-        stdout=subprocess.PIPE
-    )
-    if process.wait() == 0:
-        sn = process.stdout.read()[:-1]
+
+if __name__ == "__main__":
+    parser = prepare_arg_parser()
+    args = parser.parse_args()
+    DEBUG = args.debug
+
+    if args.debug_sn:
+        sn = args.debug_sn[0]
     else:
-        print("Atcha failed.")
-        exit()
-
-certgen = Certgen(sn, args.certdir[0], get_digest_debug, args.auth_api_address[0], args.auth_api_port[0])
-
-
-
+        process = subprocess.Popen(
+            ["atsha204cmd", "serial-number"],
+            stdout=subprocess.PIPE
+        )
+        if process.wait() == 0:
+            sn = process.stdout.read()[:-1]
+        else:
+            print("Atcha failed.")
+            exit()
+    certgen = Certgen(
+            sn, args.certdir[0], get_digest_debug, args.auth_api_address[0],
+            args.auth_api_port[0])
