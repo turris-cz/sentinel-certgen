@@ -100,16 +100,19 @@ class Certgen:
         self.cert_dir = cert_dir
         self.auth_address = auth_address
         self.auth_port = auth_port
-        self.set_state_init()
+        self.key_path = self.get_crypto_name("key")
+        self.csr_path = self.get_crypto_name("csr")
+        self.cert_path = self.get_crypto_name("pem")
+
+    def get_crypto_name(self, ext):
+        return str.join(
+            '/', (self.cert_dir, str.join('.', (str(self.sn), ext)))
+        )
 
     def set_state_init(self):
-        def get_crypto_name(ext):
-            return str.join(
-                '/', (self.cert_dir, str.join('.', (str(self.sn), ext)))
-            )
-        self.key_path = get_crypto_name("key")
-        self.csr_path = get_crypto_name("csr")
-        self.cert_path = get_crypto_name("pem")
+        self.key_path = self.get_crypto_name("key")
+        self.csr_path = self.get_crypto_name("csr")
+        self.cert_path = self.get_crypto_name("pem")
         self.key = None
         self.csr = None
         self.cert = None
@@ -415,3 +418,6 @@ if __name__ == "__main__":
     certgen = Certgen(
             sn, args.certdir[0], args.auth_api_address[0],
             args.auth_api_port[0])
+    if args.force_renew:
+        certgen.clear_cert_dir()
+    certgen.set_state_init()
