@@ -28,25 +28,19 @@ def serial(string):
     """ Value-checking for argument parser.
     """
     if len(string) != 16 or not hexa_match(string):
-        raise argparse.ArgumentTypeError(
-            "Serial number must be 16 character long hexadecimal number"
-        )
+        raise argparse.ArgumentTypeError("Serial number must be 16 character long hexadecimal number")
     return string
 
 
 def get_arg_parser():
     """ Returns argument parser object.
     """
-    parser = argparse.ArgumentParser(
-        description='Certgen - client for retrieving Turris:Sentinel '
-        ' certificates'
-    )
+    parser = argparse.ArgumentParser(description='Certgen - client for retrieving Turris:Sentinel certificates')
     parser.add_argument(
         '--debug-sn',
         nargs=1,
         type=serial,
-        help='emulate serial number for debug purposes. DEBUG-SN is a '
-        '16-digit hexadecimal number.'
+        help='emulate serial number for debug purposes. DEBUG-SN is a 16-digit hexadecimal number.'
     )
     parser.add_argument(
         '--certdir',
@@ -75,8 +69,7 @@ def get_arg_parser():
     parser.add_argument(
         '--force-renew',
         action='store_true',
-        help='remove private key, generate a new one and ask '
-        ' Sentinel:Authenticator for a new certificate'
+        help='remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate'
     )
     return parser
 
@@ -107,9 +100,7 @@ class Certgen:
         self.cert_path = self.get_crypto_name("pem")
 
     def get_crypto_name(self, ext):
-        return str.join(
-            '/', (self.cert_dir, str.join('.', (str(self.sn), ext)))
-        )
+        return str.join('/', (self.cert_dir, str.join('.', (str(self.sn), ext))))
 
     def set_state_init(self):
         """ Initial state. Checking existance and validity of the private key
@@ -140,9 +131,7 @@ class Certgen:
                                 key_file.read()
                             )
                     except crypto.Error:
-                        root_logger.debug(
-                           "Private key is inconsistent, generating a new one."
-                        )
+                        root_logger.debug("Private key is inconsistent, generating a new one.")
                         self.clear_cert_dir()
                         self.generate_priv_key()
                         continue
@@ -150,9 +139,7 @@ class Certgen:
                             self.key = key
                             root_logger.debug("Private key loaded.")
                     else:
-                        root_logger.debug(
-                           "Private key is inconsistent, generating a new one."
-                        )
+                        root_logger.debug("Private key is inconsistent, generating a new one.")
                         self.clear_cert_dir()
                         self.generate_priv_key()
                         continue
@@ -173,8 +160,7 @@ class Certgen:
                             cert_file.read()
                         )
                 except crypto.Error:
-                    root_logger.debug(
-                        "Certificate file broken. Re-certifying...")
+                    root_logger.debug("Certificate file broken. Re-certifying...")
                     os.remove(self.cert_path)
                     continue
                 due_date = time.mktime(datetime.datetime.strptime(
@@ -183,9 +169,7 @@ class Certgen:
                 ).timetuple())
                 now = time.time()
                 if (due_date - now < MAX_TIME_TO_EXPIRE):
-                    root_logger.debug(
-                        "Certificate is about to expire. Re-certifying.."
-                    )
+                    root_logger.debug("Certificate is about to expire. Re-certifying..")
                     self.key = None
                     self.clear_cert_dir()
                     continue
@@ -196,16 +180,12 @@ class Certgen:
                     root_logger.debug("Certificate loaded.")
                     break
                 else:
-                    root_logger.debug(
-                        "Certificate public key does not match. "
-                        "Re-certifying..."
-                    )
+                    root_logger.debug("Certificate public key does not match. Re-certifying...")
                     os.remove(self.cert_path)
                     continue
 
             else:
-                root_logger.debug(
-                    "Certificate file does not exist. Re-certyfing.")
+                root_logger.debug("Certificate file does not exist. Re-certyfing.")
                 if os.path.exists(self.csr_path):
                     root_logger.debug("CSR file exist.")
                     try:
@@ -215,9 +195,7 @@ class Certgen:
                                 csr_file.read()
                             )
                     except crypto.Error:
-                        root_logger.debug(
-                            "CSR file is inconsistent, generating a new one."
-                        )
+                        root_logger.debug("CSR file is inconsistent, generating a new one.")
                         os.remove(self.csr_path)
                         self.generate_csr()
                         continue
@@ -228,17 +206,13 @@ class Certgen:
                         while (not self.set_state_get()):
                             pass
                     else:
-                        root_logger.debug(
-                            "CSR public key does not match, "
-                            "generating a new one."
-                        )
+                        root_logger.debug("CSR public key does not match, generating a new one.")
                         os.remove(self.csr_path)
                         self.generate_csr()
                         continue
 
                 else:
-                    root_logger.debug(
-                        "CSR file not found. Generating a new one.")
+                    root_logger.debug("CSR file not found. Generating a new one.")
                     self.generate_csr()
                     continue
 
@@ -276,8 +250,7 @@ class Certgen:
                 root_logger.debug("Obtained cert key does not match.")
                 return False
         elif recv_json.get("status") == 'wait':
-            root_logger.debug(
-                "Sleeping for {} seconds".format(recv_json['delay']))
+            root_logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
             time.sleep(recv_json['delay'])
         elif recv_json.get("status") == 'error':
             root_logger.debug("Get Error.")
@@ -310,9 +283,7 @@ class Certgen:
         recv = self.send_request(req)
         recv_json = json.loads(recv.decode("utf-8"))
         if recv_json.get("status") == "accepted":
-            root_logger.debug("Auth accepted, sleeping for {} sec.".format(
-                recv_json['delay']
-            ))
+            root_logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json['delay']))
             time.sleep(recv_json['delay'])
         else:
             root_logger.debug("Auth: Unknown error.")
@@ -384,9 +355,7 @@ class Certgen:
         """ Send http POST request.
         """
         # Creating GET request to obtain / check uuid
-        req = urllib2.Request(
-                "{}:{}".format(self.auth_address, self.auth_port)
-        )
+        req = urllib2.Request("{}:{}".format(self.auth_address, self.auth_port))
         req.add_header('Accept', 'application/json')
         req.add_header('Content-Type', 'application/json')
         data = json.dumps(req_json).encode('utf8')
