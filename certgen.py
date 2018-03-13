@@ -326,6 +326,86 @@ def send_auth(url, nonce, sn, sid):
     return json.loads(recv.decode("utf-8"))
 
 
+def process_init(key_path, csr_path, cert_path):
+    sid = 0
+    key = prepare_key(key_path)
+    cert = None
+    if os.path.exists(cert_path):
+        root_logger.debug("Certificate file exists.")
+        cert = load_cert(cert_path, key)
+    if cert:
+        if cert_expired(cert):
+            root_logger.debug("Certificate is about to expire. Removing..")
+            clear_cert_dir(key_path, csr_path, cert_path)
+            key = prepare_key(key_path)
+            cert = None
+        else:
+            root_logger.debug("Certificate not expired.")
+            root_logger.debug("Success, quitting..")
+            exit()
+
+    root_logger.debug("Certificate file does not exist. Re-certyfing.")
+    csr = None
+    if os.path.exists(csr_path):
+        root_logger.debug("CSR file exist.")
+        csr = load_csr(csr_path, key)
+    if not csr:
+        root_logger.debug("CSR file not found. Generating a new one.")
+        generate_csr_file(csr_path, sn, key)
+        csr = load_csr(csr_path, key)
+    if csr:
+        state = "GET"
+        return (state, sid, key, csr)
+    else:
+        root_logger.critical("Unable to acquire csr!")
+        raise CertgenError("Unable to acquire csr!")
+
+
+def process_get(cert_path, sn, sid, api_url, key, csr):
+    recv_json = send_get(api_url, csr, sn, sid)
+    nonce = None
+    state = "GET"
+    if recv_json.get("status") == 'ok':
+        cert = extract_cert(recv_json["cert"], key)
+        if cert:
+            root_logger.debug("Saving obtained certificate.")
+            save_cert(cert, cert_path)
+            state = "INIT"
+        else:
+            root_logger.error("Obtained cert key does not match.")
+            state = "INIT"
+
+    elif recv_json.get("status") == 'wait':
+        root_logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
+        time.sleep(recv_json['delay'])
+    elif recv_json.get("status") == 'error':
+        root_logger.error("Get Error.")
+        state = "INIT"
+    elif recv_json.get("status") == 'fail':
+        root_logger.error("Get Fail.")
+        state = "INIT"
+    elif recv_json.get("status") == 'authenticate':
+        root_logger.debug("Authentication request.")
+        sid = recv_json['sid']
+        nonce = recv_json['nonce']
+        state = "AUTH"
+    else:
+        root_logger.error("Get: Unknown error.")
+    return (state, sid, nonce)
+
+
+def process_auth(sn, sid, api_url, nonce):
+    recv_json = send_auth(api_url, nonce, sn, sid)
+    if recv_json.get("status") == "accepted":
+        root_logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json['delay']))
+        time.sleep(recv_json['delay'])
+        state = "GET"
+    else:
+        root_logger.error("Auth: Unknown error.")
+        state = "INIT"
+    return state
+
+
 if __name__ == "__main__":
     root_logger = logging.getLogger()
     root_logger.setLevel('DEBUG')
@@ -365,77 +445,11 @@ if __name__ == "__main__":
     while True:
         if state == "INIT":
             root_logger.debug("---> INIT state")
-            sid = 0
-
-            key = prepare_key(key_path)
-
-            cert = None
-            if os.path.exists(cert_path):
-                root_logger.debug("Certificate file exists.")
-                cert = load_cert(cert_path, key)
-            if cert:
-                if cert_expired(cert):
-                    root_logger.debug("Certificate is about to expire. Removing..")
-                    clear_cert_dir(key_path, csr_path, cert_path)
-                    key = prepare_key(key_path)
-                    cert = None
-                else:
-                    root_logger.debug("Certificate not expired.")
-                    root_logger.debug("Success, quitting..")
-                    exit()
-
-            root_logger.debug("Certificate file does not exist. Re-certyfing.")
-            csr = None
-            if os.path.exists(csr_path):
-                root_logger.debug("CSR file exist.")
-                csr = load_csr(csr_path, key)
-            if not csr:
-                root_logger.debug("CSR file not found. Generating a new one.")
-                generate_csr_file(csr_path, sn, key)
-                csr = load_csr(csr_path, key)
-            if csr:
-                state = "GET"
-            else:
-                root_logger.critical("Unable to acquire csr!")
-                raise CertgenError("Unable to acquire csr!")
-
+            state, sid, key, csr = process_init(key_path, csr_path, cert_path)
         elif state == "GET":
             root_logger.debug("---> GET state")
-
-            recv_json = send_get(api_url, csr, sn, sid)
-            if recv_json.get("status") == 'ok':
-                cert = extract_cert(recv_json["cert"], key)
-                if cert:
-                    root_logger.debug("Saving obtained certificate.")
-                    save_cert(cert, cert_path)
-                    state = "INIT"
-                else:
-                    root_logger.error("Obtained cert key does not match.")
-
-            elif recv_json.get("status") == 'wait':
-                root_logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
-                time.sleep(recv_json['delay'])
-            elif recv_json.get("status") == 'error':
-                root_logger.error("Get Error.")
-                state = "INIT"
-            elif recv_json.get("status") == 'fail':
-                root_logger.error("Get Fail.")
-                state = "INIT"
-            elif recv_json.get("status") == 'authenticate':
-                root_logger.debug("Authentication request.")
-                sid = recv_json['sid']
-                nonce = recv_json['nonce']
-                state = "AUTH"
-            else:
-                root_logger.error("Get: Unknown error.")
+            state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
 
         elif state == "AUTH":
             root_logger.debug("---> AUTH state")
-
-            recv_json = send_auth(api_url, nonce, sn, sid)
-            if recv_json.get("status") == "accepted":
-                root_logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json['delay']))
-                time.sleep(recv_json['delay'])
-                state = "GET"
-            else:
-                root_logger.error("Auth: Unknown error.")
+            state = process_auth(sn, sid, api_url, nonce)
