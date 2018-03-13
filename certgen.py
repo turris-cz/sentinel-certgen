@@ -89,6 +89,10 @@ def key_match(obj, key):
     return obj_pubkey_str == key_pubkey_str
 
 
+class CertgenError(Exception):
+    pass
+
+
 class Certgen:
     def __init__(self, sn, cert_dir, auth_address, auth_port):
         self.sn = sn
@@ -102,119 +106,132 @@ class Certgen:
     def get_crypto_name(self, ext):
         return str.join('/', (self.cert_dir, str.join('.', (str(self.sn), ext))))
 
+    def load_key(self):
+        """ Load the private key from a file or, if it is damaged, remove it from
+        the filesystem.
+        """
+        try:
+            with open(self.key_path, "r") as key_file:
+                key = crypto.load_privatekey(
+                    crypto.FILETYPE_PEM,
+                    key_file.read()
+                )
+        except crypto.Error:
+            root_logger.debug("Private key is inconsistent. Removing..")
+            os.remove(self.key_path)
+            return
+        if key.check():
+                self.key = key
+                root_logger.debug("Private key loaded.")
+        else:
+            root_logger.debug("Private key is inconsistent. Removing..")
+            os.remove(self.key_path)
+
+    def load_cert(self):
+        """ Load the certificate from a file or, if it is damaged, remove it from
+        the filesystem.
+        """
+        try:
+            with open(self.cert_path, "r") as cert_file:
+                cert = crypto.load_certificate(
+                    crypto.FILETYPE_PEM,
+                    cert_file.read()
+                )
+        except crypto.Error:
+            root_logger.debug("Certificate file broken. Removing..")
+            os.remove(self.cert_path)
+            return
+        due_date = cert.get_notAfter().decode("utf-8")
+        due_date = datetime.datetime.strptime(due_date, "%Y%m%d%H%M%SZ")
+        due_date = time.mktime(due_date.timetuple())
+        now = time.time()
+        if (due_date - now < MAX_TIME_TO_EXPIRE):
+            root_logger.debug("Certificate is about to expire. Removing..")
+            self.clear_cert_dir()
+            self.prepare_priv_key()
+            return
+        else:
+            root_logger.debug("Certificate not expired.")
+        if key_match(cert, self.key):
+            self.cert = cert
+            root_logger.debug("Certificate loaded.")
+        else:
+            root_logger.debug("Certificate public key does not match. Removing..")
+            os.remove(self.cert_path)
+
+    def load_csr(self):
+        """ Load the certificate from a file or, if it is damaged, remove it from
+        the filesystem.
+        """
+        try:
+            with open(self.csr_path, "r") as csr_file:
+                csr = crypto.load_certificate_request(
+                    crypto.FILETYPE_PEM,
+                    csr_file.read()
+                )
+        except crypto.Error:
+            root_logger.debug("CSR file is inconsistent. Removing..")
+            os.remove(self.csr_path)
+            return
+        if key_match(csr, self.key):
+            self.csr = csr
+            root_logger.debug("CSR loaded.")
+        else:
+            root_logger.debug("CSR public key does not match. Removing..")
+            os.remove(self.csr_path)
+
+    def prepare_priv_key(self):
+        """ Load or re-generate private key.
+        """
+        self.key_path = self.get_crypto_name("key")
+        self.key = None
+
+        if os.path.exists(self.key_path):
+            root_logger.debug("Private key file exists.")
+            self.load_key()
+        if self.key:
+            return
+
+        root_logger.debug("Private key file not found. Generating new one.")
+        self.generate_priv_key_file()
+        self.load_key()
+        if not self.key:
+            root_logger.critical("Unable to acquire private key!")
+            raise CertgenError("Unable to acquire private key!")
+
     def set_state_init(self):
         """ Initial state. Checking existance and validity of the private key
         and certificate. If something of this fail, new CSR (certificate sign
         request) is created and state GET is set.
         """
-        self.key_path = self.get_crypto_name("key")
         self.csr_path = self.get_crypto_name("csr")
         self.cert_path = self.get_crypto_name("pem")
-        self.key = None
         self.csr = None
         self.cert = None
         self.sid = 0
 
-        # We check existence and validity of private key and certificate
-        # Every iteration of this loop checks another component and based on
-        # the validations results it removes, acknowledges or creates it
-        # In the final loop all the components are loaded from files.
-        while True:
-            root_logger.debug("---> INIT state")
-            if not self.key:  # private key is not loaded in Certgen
-                if os.path.exists(self.key_path):
-                    root_logger.debug("Private key file exists.")
-                    try:
-                        with open(self.key_path, "r") as key_file:
-                            key = crypto.load_privatekey(
-                                crypto.FILETYPE_PEM,
-                                key_file.read()
-                            )
-                    except crypto.Error:
-                        root_logger.debug("Private key is inconsistent, generating a new one.")
-                        self.clear_cert_dir()
-                        self.generate_priv_key()
-                        continue
-                    if key.check():
-                            self.key = key
-                            root_logger.debug("Private key loaded.")
-                    else:
-                        root_logger.debug("Private key is inconsistent, generating a new one.")
-                        self.clear_cert_dir()
-                        self.generate_priv_key()
-                        continue
+        root_logger.debug("---> INIT state")
+        self.prepare_priv_key()
+        if os.path.exists(self.cert_path):
+            root_logger.debug("Certificate file exists.")
+            self.load_cert()
+        if self.cert:
+            return
 
-                else:
-                    root_logger.debug("Private key file not found")
-                    root_logger.debug("Private key: generating a new one.")
-                    self.clear_cert_dir()
-                    self.generate_priv_key()
-                    continue
+        root_logger.debug("Certificate file does not exist. Re-certyfing.")
+        if os.path.exists(self.csr_path):
+            root_logger.debug("CSR file exist.")
+            self.load_csr()
+        if not self.csr:
+            root_logger.debug("CSR file not found. Generating a new one.")
+            self.generate_csr_file()
+            self.load_csr()
+        if not self.csr:
+            root_logger.critical("Unable to acquire csr!")
+            raise CertgenError("Unable to acquire csr!")
 
-            if os.path.exists(self.cert_path):
-                root_logger.debug("Certificate file exists.")
-                try:
-                    with open(self.cert_path, "r") as cert_file:
-                        cert = crypto.load_certificate(
-                            crypto.FILETYPE_PEM,
-                            cert_file.read()
-                        )
-                except crypto.Error:
-                    root_logger.debug("Certificate file broken. Re-certifying...")
-                    os.remove(self.cert_path)
-                    continue
-                due_date = time.mktime(datetime.datetime.strptime(
-                    cert.get_notAfter().decode("utf-8"),
-                    "%Y%m%d%H%M%SZ",
-                ).timetuple())
-                now = time.time()
-                if (due_date - now < MAX_TIME_TO_EXPIRE):
-                    root_logger.debug("Certificate is about to expire. Re-certifying..")
-                    self.key = None
-                    self.clear_cert_dir()
-                    continue
-                else:
-                    root_logger.debug("Certificate not expired.")
-                if key_match(cert, self.key):
-                    self.cert = cert
-                    root_logger.debug("Certificate loaded.")
-                    break
-                else:
-                    root_logger.debug("Certificate public key does not match. Re-certifying...")
-                    os.remove(self.cert_path)
-                    continue
-
-            else:
-                root_logger.debug("Certificate file does not exist. Re-certyfing.")
-                if os.path.exists(self.csr_path):
-                    root_logger.debug("CSR file exist.")
-                    try:
-                        with open(self.csr_path, "r") as csr_file:
-                            csr = crypto.load_certificate_request(
-                                crypto.FILETYPE_PEM,
-                                csr_file.read()
-                            )
-                    except crypto.Error:
-                        root_logger.debug("CSR file is inconsistent, generating a new one.")
-                        os.remove(self.csr_path)
-                        self.generate_csr()
-                        continue
-
-                    if key_match(csr, self.key):
-                        self.csr = csr
-                        root_logger.debug("CSR loaded.")
-                        while (not self.set_state_get()):
-                            pass
-                    else:
-                        root_logger.debug("CSR public key does not match, generating a new one.")
-                        os.remove(self.csr_path)
-                        self.generate_csr()
-                        continue
-
-                else:
-                    root_logger.debug("CSR file not found. Generating a new one.")
-                    self.generate_csr()
-                    continue
+        while(not self.set_state_get()):
+            pass
 
     def set_state_get(self):
         """ In this state, certificate is being requested using CSR. If no
@@ -292,8 +309,6 @@ class Certgen:
         """ Remove (if exist) private and public keys and certificate
         sifning request from Sentinel certificate directory.
         """
-        root_logger.debug("Clearing certificate directory.")
-
         if os.path.exists(self.key_path):
             os.remove(self.key_path)
         if os.path.exists(self.csr_path):
@@ -301,7 +316,7 @@ class Certgen:
         if os.path.exists(self.cert_path):
             os.remove(self.cert_path)
 
-    def generate_priv_key(self):
+    def generate_priv_key_file(self):
         key = crypto.PKey()
         key.generate_key(KEY_TYPE, KEY_LEN)
         with open(self.key_path, "w") as key_file:
@@ -310,7 +325,7 @@ class Certgen:
                 pkey=key
             ).decode("utf-8"))
 
-    def generate_csr(self):
+    def generate_csr_file(self):
         csr = crypto.X509Req()
         csr.get_subject().CN = self.sn
         csr.get_subject().countryName = "cz"
