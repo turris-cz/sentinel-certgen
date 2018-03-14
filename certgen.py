@@ -78,14 +78,8 @@ def key_match(obj, key):
     """ Compares two public keys in different formats and returns true if they
     match.
     """
-    obj_pubkey_str = crypto.dump_publickey(
-        type=crypto.FILETYPE_PEM,
-        pkey=obj.get_pubkey(),
-    ).decode("utf-8")
-    key_pubkey_str = crypto.dump_publickey(
-        type=crypto.FILETYPE_PEM,
-        pkey=key,
-    ).decode("utf-8")
+    obj_pubkey_str = crypto.dump_publickey(type=crypto.FILETYPE_PEM, pkey=obj.get_pubkey()).decode("utf-8")
+    key_pubkey_str = crypto.dump_publickey(type=crypto.FILETYPE_PEM, pkey=key).decode("utf-8")
     return obj_pubkey_str == key_pubkey_str
 
 
@@ -94,96 +88,87 @@ class CertgenError(Exception):
 
 
 def get_crypto_name(cert_dir, sn, ext):
-        return str.join('/', (cert_dir, str.join('.', (str(sn), ext))))
+    return str.join('/', (cert_dir, str.join('.', (str(sn), ext))))
 
 
 def load_key(key_path):
-        """ Load the private key from a file or, if it is damaged, remove it from
-        the filesystem.
-        """
-        try:
-            with open(key_path, "r") as key_file:
-                key = crypto.load_privatekey(
-                    crypto.FILETYPE_PEM,
-                    key_file.read()
-                )
-        except crypto.Error:
-            root_logger.debug("Private key is inconsistent. Removing..")
-            os.remove(key_path)
-            return None
-        if key.check():
-            root_logger.debug("Private key loaded.")
-            return key
-        else:
-            root_logger.debug("Private key is inconsistent. Removing..")
-            os.remove(key_path)
-            return None
+    """ Load the private key from a file or, if it is damaged, remove it from
+    the filesystem.
+    """
+    try:
+        with open(key_path, "r") as key_file:
+            key = crypto.load_privatekey(crypto.FILETYPE_PEM, key_file.read())
+    except crypto.Error:
+        root_logger.debug("Private key is inconsistent. Removing..")
+        os.remove(key_path)
+        return None
+    if key.check():
+        root_logger.debug("Private key loaded.")
+        return key
+    else:
+        root_logger.debug("Private key is inconsistent. Removing..")
+        os.remove(key_path)
+        return None
 
 
 def load_cert(cert_path, key):
-        """ Load the certificate from a file or, if it is damaged, remove it from
-        the filesystem.
-        """
-        try:
-            with open(cert_path, "r") as cert_file:
-                cert = crypto.load_certificate(
-                    crypto.FILETYPE_PEM,
-                    cert_file.read()
-                )
-        except crypto.Error:
-            root_logger.debug("Certificate file broken. Removing..")
-            os.remove(cert_path)
-            return None
-        if key_match(cert, key):
-            root_logger.debug("Certificate loaded.")
-            return cert
-        else:
-            root_logger.debug("Certificate public key does not match. Removing..")
-            os.remove(cert_path)
-            return None
+    """ Load the certificate from a file or, if it is damaged, remove it from
+    the filesystem.
+    """
+    try:
+        with open(cert_path, "r") as cert_file:
+            cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read())
+    except crypto.Error:
+        root_logger.debug("Certificate file broken. Removing..")
+        os.remove(cert_path)
+        return None
+    if key_match(cert, key):
+        root_logger.debug("Certificate loaded.")
+        return cert
+    else:
+        root_logger.debug("Certificate public key does not match. Removing..")
+        os.remove(cert_path)
+        return None
 
 
 def load_csr(csr_path, key):
-        """ Load the certificate from a file or, if it is damaged, remove it from
-        the filesystem.
-        """
-        try:
-            with open(csr_path, "r") as csr_file:
-                csr = crypto.load_certificate_request(
-                    crypto.FILETYPE_PEM,
-                    csr_file.read()
-                )
-        except crypto.Error:
-            root_logger.debug("CSR file is inconsistent. Removing..")
-            os.remove(csr_path)
-            return None
-        if key_match(csr, key):
-            root_logger.debug("CSR loaded.")
-            return csr
-        else:
-            root_logger.debug("CSR public key does not match. Removing..")
-            os.remove(csr_path)
-            return None
+    """ Load the certificate from a file or, if it is damaged, remove it from
+    the filesystem.
+    """
+    try:
+        with open(csr_path, "r") as csr_file:
+            csr = crypto.load_certificate_request(crypto.FILETYPE_PEM, csr_file.read())
+    except crypto.Error:
+        root_logger.debug("CSR file is inconsistent. Removing..")
+        os.remove(csr_path)
+        return None
+    if key_match(csr, key):
+        root_logger.debug("CSR loaded.")
+        return csr
+    else:
+        root_logger.debug("CSR public key does not match. Removing..")
+        os.remove(csr_path)
+        return None
 
 
 def prepare_key(key_path):
-        """ Load or re-generate private key.
-        """
-        key = None
-        if os.path.exists(key_path):
-            root_logger.debug("Private key file exists.")
-            key = load_key(key_path)
-        if key:
-            return key
+    """ Load or re-generate private key.
+    """
+    key = None
+    if os.path.exists(key_path):
+         root_logger.debug("Private key file exists.")
+         key = load_key(key_path)
+    if key:
+        return key
 
-        root_logger.debug("Private key file not found. Generating new one.")
-        generate_priv_key_file(key_path)
-        key = load_key(key_path)
-        if key:
-            return key
-        else:
-            root_logger.critical("Unable to acquire private key!")
-            raise CertgenError("Unable to acquire private key!")
+    root_logger.debug("Private key file not found. Generating new one.")
+    generate_priv_key_file(key_path)
+    key = load_key(key_path)
+    if key:
+        return key
+    else:
+        root_logger.critical("Unable to acquire private key!")
+        raise CertgenError("Unable to acquire private key!")
 
 
 def extract_cert(cert_str, key):
@@ -195,115 +180,94 @@ def extract_cert(cert_str, key):
 
 
 def cert_expired(cert):
-        due_date = cert.get_notAfter().decode("utf-8")
-        due_date = datetime.datetime.strptime(due_date, "%Y%m%d%H%M%SZ")
-        due_date = time.mktime(due_date.timetuple())
-        now = time.time()
-        return due_date - now < MAX_TIME_TO_EXPIRE
+    due_date = cert.get_notAfter().decode("utf-8")
+    due_date = datetime.datetime.strptime(due_date, "%Y%m%d%H%M%SZ")
+    due_date = time.mktime(due_date.timetuple())
+    now = time.time()
+    return due_date - now < MAX_TIME_TO_EXPIRE
 
 
 def clear_cert_dir(key_path, csr_path, cert_path):
-        """ Remove (if exist) private and public keys and certificate
-        sifning request from Sentinel certificate directory.
-        """
-        if os.path.exists(key_path):
-            os.remove(key_path)
-        if os.path.exists(csr_path):
-            os.remove(csr_path)
-        if os.path.exists(cert_path):
-            os.remove(cert_path)
+    """ Remove (if exist) private and public keys and certificate
+    sifning request from Sentinel certificate directory.
+    """
+    if os.path.exists(key_path):
+        os.remove(key_path)
+    if os.path.exists(csr_path):
+        os.remove(csr_path)
+    if os.path.exists(cert_path):
+        os.remove(cert_path)
 
 
 def generate_priv_key_file(key_path):
-        key = crypto.PKey()
-        key.generate_key(KEY_TYPE, KEY_LEN)
-        with open(key_path, "w") as key_file:
-            key_file.write(crypto.dump_privatekey(
-                type=crypto.FILETYPE_PEM,
-                pkey=key
-            ).decode("utf-8"))
+    key = crypto.PKey()
+    key.generate_key(KEY_TYPE, KEY_LEN)
+    with open(key_path, "w") as key_file:
+        key_file.write(crypto.dump_privatekey(type=crypto.FILETYPE_PEM, pkey=key).decode("utf-8"))
 
 
 def generate_csr_file(cert_path, sn, key):
-        csr = crypto.X509Req()
-        csr.get_subject().CN = sn
-        csr.get_subject().countryName = "cz"
-        csr.get_subject().stateOrProvinceName = "Prague"
-        csr.get_subject().localityName = "Prague"
-        csr.get_subject().organizationName = "CZ.NIC"
-        csr.get_subject().organizationalUnitName = "Turris"
+    csr = crypto.X509Req()
+    csr.get_subject().CN = sn
+    csr.get_subject().countryName = "cz"
+    csr.get_subject().stateOrProvinceName = "Prague"
+    csr.get_subject().localityName = "Prague"
+    csr.get_subject().organizationName = "CZ.NIC"
+    csr.get_subject().organizationalUnitName = "Turris"
 
-        # Add in extensions
-        x509_extensions = ([
-            crypto.X509Extension(
-                b"keyUsage",
-                False,
-                b"Digital Signature, Non Repudiation, Key Encipherment"
-            ),
-            crypto.X509Extension(
-                b"basicConstraints",
-                False,
-                b"CA:FALSE"),
-        ])
-        csr.add_extensions(x509_extensions)
+    # Add in extensions
+    x509_extensions = ([
+        crypto.X509Extension(b"keyUsage", False, b"Digital Signature, Non Repudiation, Key Encipherment"),
+        crypto.X509Extension(b"basicConstraints", False, b"CA:FALSE")
+    ])
+    csr.add_extensions(x509_extensions)
 
-        csr.set_pubkey(key)
-        csr.sign(key, "sha256")
+    csr.set_pubkey(key)
+    csr.sign(key, "sha256")
 
-        with open(csr_path, "w") as csr_file:
-            csr_file.write(crypto.dump_certificate_request(
-                type=crypto.FILETYPE_PEM,
-                req=csr
-            ).decode("utf-8"))
+    with open(csr_path, "w") as csr_file:
+        csr_file.write(crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8"))
 
 
 def save_cert(cert, cert_path):
-        """ Save received certificate to a file.
-        """
-        with open(cert_path, "w") as cert_file:
-            cert_file.write(crypto.dump_certificate(
-                type=crypto.FILETYPE_PEM,
-                cert=cert
-            ).decode("utf-8"))
+    """ Save received certificate to a file.
+    """
+    with open(cert_path, "w") as cert_file:
+        cert_file.write(crypto.dump_certificate(type=crypto.FILETYPE_PEM, cert=cert).decode("utf-8"))
 
 
 def send_request(url, req_json):
-        """ Send http POST request.
-        """
-        # Creating GET request to obtain / check uuid
-        req = urllib2.Request(url)
-        req.add_header('Accept', 'application/json')
-        req.add_header('Content-Type', 'application/json')
-        data = json.dumps(req_json).encode('utf8')
+    """ Send http POST request.
+    """
+    # Creating GET request to obtain / check uuid
+    req = urllib2.Request(url)
+    req.add_header('Accept', 'application/json')
+    req.add_header('Content-Type', 'application/json')
+    data = json.dumps(req_json).encode('utf8')
 
-        # create ssl context
-        ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ctx.verify_mode = ssl.CERT_REQUIRED
-        ctx.set_default_verify_paths()
-        ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-        ctx.load_verify_locations("ca.pem")
-        resp = urllib2.urlopen(req, data, context=ctx)
-        resp_json = resp.read()
-        return resp_json
+    # create ssl context
+    ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.set_default_verify_paths()
+    ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+    ctx.load_verify_locations("ca.pem")
+    resp = urllib2.urlopen(req, data, context=ctx)
+    resp_json = resp.read()
+    return resp_json
 
 
 def get_digest(nonce):
-        process = subprocess.Popen(
+    process = subprocess.Popen(
             ["atsha204cmd", "challenge-response"],
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE
-        )
-        # the return value is a list
-        # remove '\n' at the and
-        digest = process.communicate(input=nonce+'\n')[0][:-1]
-        return digest
+            stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    # the return value is a list
+    # remove '\n' at the and
+    digest = process.communicate(input=nonce+'\n')[0][:-1]
+    return digest
 
 
 def send_get(url, csr, sn, sid):
-    csr_str = crypto.dump_certificate_request(
-        type=crypto.FILETYPE_PEM,
-        req=csr
-    ).decode("utf-8")
+    csr_str = crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8")
     req = {
         "api_version": "0.1",
         "type": "get_cert",
@@ -425,10 +389,7 @@ if __name__ == "__main__":
     if args.debug_sn:
         sn = args.debug_sn[0]
     else:
-        process = subprocess.Popen(
-            ["atsha204cmd", "serial-number"],
-            stdout=subprocess.PIPE
-        )
+        process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
         if process.wait() == 0:
             sn = process.stdout.read()[:-1]
         else:
@@ -451,7 +412,6 @@ if __name__ == "__main__":
         elif state == "GET":
             root_logger.debug("---> GET state")
             state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
-
         elif state == "AUTH":
             root_logger.debug("---> AUTH state")
             state = process_auth(sn, sid, api_url, nonce)
