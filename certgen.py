@@ -293,7 +293,9 @@ def get_digest(nonce):
             stdout=subprocess.PIPE,
             stdin=subprocess.PIPE
         )
-        digest = process.communicate(input=nonce+'\n')[0]
+        # the return value is a list
+        # remove '\n' at the and
+        digest = process.communicate(input=nonce+'\n')[0][:-1]
         return digest
 
 
