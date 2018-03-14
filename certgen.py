@@ -156,8 +156,8 @@ def prepare_key(key_path):
     """
     key = None
     if os.path.exists(key_path):
-         root_logger.debug("Private key file exists.")
-         key = load_key(key_path)
+        root_logger.debug("Private key file exists.")
+        key = load_key(key_path)
     if key:
         return key
 
@@ -206,7 +206,7 @@ def generate_priv_key_file(key_path):
         key_file.write(crypto.dump_privatekey(type=crypto.FILETYPE_PEM, pkey=key).decode("utf-8"))
 
 
-def generate_csr_file(cert_path, sn, key):
+def generate_csr_file(csr_path, sn, key):
     csr = crypto.X509Req()
     csr.get_subject().CN = sn
     csr.get_subject().countryName = "cz"
@@ -292,7 +292,7 @@ def send_auth(url, nonce, sn, sid):
     return json.loads(recv.decode("utf-8"))
 
 
-def process_init(key_path, csr_path, cert_path):
+def process_init(key_path, csr_path, cert_path, sn):
     sid = 0
     key = prepare_key(key_path)
     cert = None
@@ -372,7 +372,22 @@ def process_auth(sn, sid, api_url, nonce):
     return state
 
 
-if __name__ == "__main__":
+def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
+    state = "INIT"
+    while True:
+        if state == "INIT":
+            root_logger.debug("---> INIT state")
+            state, sid, key, csr = process_init(key_path, csr_path, cert_path, sn)
+        elif state == "GET":
+            root_logger.debug("---> GET state")
+            state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
+        elif state == "AUTH":
+            root_logger.debug("---> AUTH state")
+            state = process_auth(sn, sid, api_url, nonce)
+
+
+def main():
+    global root_logger
     root_logger = logging.getLogger()
     root_logger.setLevel('DEBUG')
     root_logger.addHandler(logging.NullHandler())
@@ -404,14 +419,8 @@ if __name__ == "__main__":
     if args.force_renew:
         clear_cert_dir(key_path, csr_path, cert_path)
 
-    state = "INIT"
-    while True:
-        if state == "INIT":
-            root_logger.debug("---> INIT state")
-            state, sid, key, csr = process_init(key_path, csr_path, cert_path)
-        elif state == "GET":
-            root_logger.debug("---> GET state")
-            state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
-        elif state == "AUTH":
-            root_logger.debug("---> AUTH state")
-            state = process_auth(sn, sid, api_url, nonce)
+    start_state_machine(key_path, csr_path, cert_path, sn, api_url)
+
+
+if __name__ == "__main__":
+    main()
