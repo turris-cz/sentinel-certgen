@@ -17,6 +17,10 @@ KEY_TYPE = crypto.TYPE_RSA
 KEY_LEN = 4096
 MAX_TIME_TO_EXPIRE = 30*24*60*60
 
+logger = logging.getLogger("certgen")
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.NullHandler())
+
 
 def hexa_match(string):
     """ Check whether the string contains only hexadecimal characters
@@ -49,22 +53,26 @@ def get_arg_parser():
         help='path to Sentinel certificate location'
     )
     parser.add_argument(
-        '--cert-api-address',
+        '-H', '--cert-api-hostname',
         nargs=1,
         required=True,
-        help='Certgen api address'
+        help='Certgen api hostname'
     )
     parser.add_argument(
-        '--cert-api-port',
+        '-p', '--cert-api-port',
         nargs=1,
         required=True,
         help='Certgen api port'
     )
     parser.add_argument(
-        '--console-log',
-        type=int,
-        choices=range(1, 51),
-        help='Enables logging to console for the level 1..50'
+        '-d', '--debug',
+        action='store_true',
+        help='Raise logging level to debug'
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Enables logging to console'
     )
     parser.add_argument(
         '--force-renew',
@@ -99,14 +107,14 @@ def load_key(key_path):
         with open(key_path, "r") as key_file:
             key = crypto.load_privatekey(crypto.FILETYPE_PEM, key_file.read())
     except crypto.Error:
-        root_logger.debug("Private key is inconsistent. Removing..")
+        logger.debug("Private key is inconsistent. Removing..")
         os.remove(key_path)
         return None
     if key.check():
-        root_logger.debug("Private key loaded.")
+        logger.debug("Private key loaded.")
         return key
     else:
-        root_logger.debug("Private key is inconsistent. Removing..")
+        logger.debug("Private key is inconsistent. Removing..")
         os.remove(key_path)
         return None
 
@@ -119,14 +127,14 @@ def load_cert(cert_path, key):
         with open(cert_path, "r") as cert_file:
             cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read())
     except crypto.Error:
-        root_logger.debug("Certificate file broken. Removing..")
+        logger.debug("Certificate file broken. Removing..")
         os.remove(cert_path)
         return None
     if key_match(cert, key):
-        root_logger.debug("Certificate loaded.")
+        logger.debug("Certificate loaded.")
         return cert
     else:
-        root_logger.debug("Certificate public key does not match. Removing..")
+        logger.debug("Certificate public key does not match. Removing..")
         os.remove(cert_path)
         return None
 
@@ -139,14 +147,14 @@ def load_csr(csr_path, key):
         with open(csr_path, "r") as csr_file:
             csr = crypto.load_certificate_request(crypto.FILETYPE_PEM, csr_file.read())
     except crypto.Error:
-        root_logger.debug("CSR file is inconsistent. Removing..")
+        logger.debug("CSR file is inconsistent. Removing..")
         os.remove(csr_path)
         return None
     if key_match(csr, key):
-        root_logger.debug("CSR loaded.")
+        logger.debug("CSR loaded.")
         return csr
     else:
-        root_logger.debug("CSR public key does not match. Removing..")
+        logger.debug("CSR public key does not match. Removing..")
         os.remove(csr_path)
         return None
 
@@ -156,18 +164,18 @@ def prepare_key(key_path):
     """
     key = None
     if os.path.exists(key_path):
-        root_logger.debug("Private key file exists.")
+        logger.debug("Private key file exists.")
         key = load_key(key_path)
     if key:
         return key
 
-    root_logger.debug("Private key file not found. Generating new one.")
+    logger.info("Private key file not found. Generating new one.")
     generate_priv_key_file(key_path)
     key = load_key(key_path)
     if key:
         return key
     else:
-        root_logger.critical("Unable to acquire private key!")
+        logger.critical("Unable to acquire private key!")
         raise CertgenError("Unable to acquire private key!")
 
 
@@ -297,33 +305,33 @@ def process_init(key_path, csr_path, cert_path, sn):
     key = prepare_key(key_path)
     cert = None
     if os.path.exists(cert_path):
-        root_logger.debug("Certificate file exists.")
+        logger.debug("Certificate file exists.")
         cert = load_cert(cert_path, key)
     if cert:
         if cert_expired(cert):
-            root_logger.debug("Certificate is about to expire. Removing..")
+            logger.info("Certificate is about to expire. Removing..")
             clear_cert_dir(key_path, csr_path, cert_path)
             key = prepare_key(key_path)
             cert = None
         else:
-            root_logger.debug("Certificate not expired.")
-            root_logger.debug("Success, quitting..")
+            logger.debug("Certificate not expired.")
+            logger.debug("Success, quitting..")
             exit()
 
-    root_logger.debug("Certificate file does not exist. Re-certyfing.")
+    logger.info("Certificate file does not exist. Re-certifying.")
     csr = None
     if os.path.exists(csr_path):
-        root_logger.debug("CSR file exist.")
+        logger.debug("CSR file exist.")
         csr = load_csr(csr_path, key)
     if not csr:
-        root_logger.debug("CSR file not found. Generating a new one.")
+        logger.debug("CSR file not found. Generating a new one.")
         generate_csr_file(csr_path, sn, key)
         csr = load_csr(csr_path, key)
     if csr:
         state = "GET"
         return (state, sid, key, csr)
     else:
-        root_logger.critical("Unable to acquire csr!")
+        logger.critical("Unable to acquire csr!")
         raise CertgenError("Unable to acquire csr!")
 
 
@@ -334,40 +342,40 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
     if recv_json.get("status") == 'ok':
         cert = extract_cert(recv_json["cert"], key)
         if cert:
-            root_logger.debug("Saving obtained certificate.")
+            logger.info("New certificate succesfully downloaded.")
             save_cert(cert, cert_path)
             state = "INIT"
         else:
-            root_logger.error("Obtained cert key does not match.")
+            logger.error("Obtained cert key does not match.")
             state = "INIT"
 
     elif recv_json.get("status") == 'wait':
-        root_logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
+        logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
         time.sleep(recv_json['delay'])
     elif recv_json.get("status") == 'error':
-        root_logger.error("Get Error.")
+        logger.error("Get Error.")
         state = "INIT"
     elif recv_json.get("status") == 'fail':
-        root_logger.error("Get Fail.")
+        logger.error("Get Fail.")
         state = "INIT"
     elif recv_json.get("status") == 'authenticate':
-        root_logger.debug("Authentication request.")
+        logger.debug("Authentication request.")
         sid = recv_json['sid']
         nonce = recv_json['nonce']
         state = "AUTH"
     else:
-        root_logger.error("Get: Unknown error.")
+        logger.error("Get: Unknown error.")
     return (state, sid, nonce)
 
 
 def process_auth(sn, sid, api_url, nonce):
     recv_json = send_auth(api_url, nonce, sn, sid)
     if recv_json.get("status") == "accepted":
-        root_logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json['delay']))
+        logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json['delay']))
         time.sleep(recv_json['delay'])
         state = "GET"
     else:
-        root_logger.error("Auth: Unknown error.")
+        logger.error("Auth: Unknown error.")
         state = "INIT"
     return state
 
@@ -376,30 +384,28 @@ def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
     state = "INIT"
     while True:
         if state == "INIT":
-            root_logger.debug("---> INIT state")
+            logger.debug("---> INIT state")
             state, sid, key, csr = process_init(key_path, csr_path, cert_path, sn)
         elif state == "GET":
-            root_logger.debug("---> GET state")
+            logger.debug("---> GET state")
             state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
         elif state == "AUTH":
-            root_logger.debug("---> AUTH state")
+            logger.debug("---> AUTH state")
             state = process_auth(sn, sid, api_url, nonce)
 
 
 def main():
-    global root_logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel('DEBUG')
-    root_logger.addHandler(logging.NullHandler())
-
     parser = get_arg_parser()
     args = parser.parse_args()
 
-    if args.console_log:
+    if args.verbose:
         cl = logging.StreamHandler()
-        cl.setLevel(args.console_log)
+        cl.setLevel(logging.DEBUG)
         cl.formatter = logging.Formatter('%(levelname)s:%(message)s')
-        root_logger.addHandler(cl)
+        logger.addHandler(cl)
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
     if args.debug_sn:
         sn = args.debug_sn[0]
@@ -410,7 +416,7 @@ def main():
         else:
             logging.critical("Atcha failed: sn")
             exit()
-    api_url = "{}:{}".format(args.cert_api_address[0], args.cert_api_port[0])
+    api_url = "https://{}:{}".format(args.cert_api_hostname[0], args.cert_api_port[0])
 
     csr_path = get_crypto_name(args.certdir[0], sn, "csr")
     cert_path = get_crypto_name(args.certdir[0], sn, "pem")
