@@ -224,6 +224,8 @@ def send_request(url, req_json):
 
 
 def get_digest(nonce):
+    """ Returns atsha-based digest based on nonce.
+    """
     process = subprocess.Popen(
             ["atsha204cmd", "challenge-response"],
             stdout=subprocess.PIPE, stdin=subprocess.PIPE)
@@ -234,6 +236,8 @@ def get_digest(nonce):
 
 
 def send_get(url, csr, sn, sid):
+    """ Send http request in the GET state.
+    """
     csr_str = crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8")
     req = {
         "api_version": "0.1",
@@ -247,6 +251,8 @@ def send_get(url, csr, sn, sid):
 
 
 def send_auth(url, nonce, sn, sid):
+    """ Send http request in the AUTH state.
+    """
     digest = get_digest(nonce)
     req = {
         "api_version": "0.1",
@@ -260,6 +266,14 @@ def send_auth(url, nonce, sn, sid):
 
 
 def process_init(key_path, csr_path, cert_path, sn):
+    """ Processing the initial state. In this state, private key and certicate
+    are loaded from the certificate directory. If something in the process fails
+    the private key may be re-generated and a certificate signing request is
+    prepared.
+    Depending on the status of certificate file this state continus with status:
+        GET - when no consistent cert is present
+        VALID - when the cert is present and consistent
+    """
     sid = 0
 
     key = None
@@ -300,11 +314,20 @@ def process_init(key_path, csr_path, cert_path, sn):
 
 
 def process_get(cert_path, sn, sid, api_url, key, csr):
+    """ Processing the GET state. In this state the application tries to
+    download and save new certificate from Cert-api server. This state may
+    continue with three statuses:
+        INIT: when a valid certificate is downloaded and saved (init must check
+            consistency of certificate file)
+        AUTH: when there is no valid cert in the server and authentication for
+            the certification process in needed
+        GET: the certification process is still running, we have to wait
+        INIT: the received certificate is not valid or some other error occured
+    """
     recv_json = send_get(api_url, csr, sn, sid)
     nonce = None
-    state = "GET"
     if recv_json.get("status") == "ok":
-        cert = extract_cert(recv_json["cert"], key)
+        cert = extract_cert(recv_json["cert"], key)  # extract & consistency check
         if cert:
             logger.info("New certificate succesfully downloaded.")
             save_cert(cert, cert_path)
@@ -312,10 +335,10 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
         else:
             logger.error("Obtained cert key does not match.")
             state = "INIT"
-
     elif recv_json.get("status") == "wait":
         logger.debug("Sleeping for {} seconds".format(recv_json["delay"]))
         time.sleep(recv_json["delay"])
+        state = "GET"
     elif recv_json.get("status") == "error":
         logger.error("Get Error.")
         state = "INIT"
@@ -333,6 +356,12 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
 
 
 def process_auth(sn, sid, api_url, nonce):
+    """ Processing the AUTH state. In this state the application authenticates to
+    the Cert-api server. This state may continue with two statuses:
+        GET: authectication was succesfull, we can continue to download the
+            new certificate
+        INIT: there was an error in the authentication process
+    """
     recv_json = send_auth(api_url, nonce, sn, sid)
     if recv_json.get("status") == "accepted":
         logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
@@ -345,6 +374,12 @@ def process_auth(sn, sid, api_url, nonce):
 
 
 def process_valid(key_path, csr_path, cert_path, cert):
+    """ Processing the VALID state. In this state the application checks the
+    expiracy of the certificate. This state may continue with two statuses:
+        VALID: the certificate did not expired and is not going to expire in
+            within a defined time
+        INIT: the certificate fully or nearly expired, it will be removed
+    """
     if cert_expired(cert):
         logger.info("Certificate is about to expire. Removing..")
         clear_cert_dir(key_path, csr_path, cert_path)
@@ -358,16 +393,16 @@ def process_valid(key_path, csr_path, cert_path, cert):
 def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
     state = "INIT"
     while True:
-        if state == "INIT":
+        if state == "INIT":  # look for file with consistent certificate
             logger.debug("---> INIT state")
             state, sid, key, cert, csr = process_init(key_path, csr_path, cert_path, sn)
-        elif state == "GET":
+        elif state == "GET":  # if there is no cert in file, download & save cert form Cert-api
             logger.debug("---> GET state")
             state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
-        elif state == "AUTH":
+        elif state == "AUTH":  # if there is no valid cert in Cert-api, ask for a new one
             logger.debug("---> AUTH state")
             state = process_auth(sn, sid, api_url, nonce)
-        elif state == "VALID":
+        elif state == "VALID":  # Check certificate expiration
             logger.debug("---> VALID state")
             state = process_valid(key_path, csr_path, cert_path, cert)
             if state == "VALID":  # if the VALID state stays valid, exit the app
