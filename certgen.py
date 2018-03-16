@@ -138,26 +138,6 @@ def load_csr(csr_path, key):
         return None
 
 
-def prepare_key(key_path):
-    """ Load or re-generate private key.
-    """
-    key = None
-    if os.path.exists(key_path):
-        logger.debug("Private key file exists.")
-        key = load_key(key_path)
-    if key:
-        return key
-
-    logger.info("Private key file not found. Generating new one.")
-    generate_priv_key_file(key_path)
-    key = load_key(key_path)
-    if key:
-        return key
-    else:
-        logger.critical("Unable to acquire private key!")
-        raise CertgenError("Unable to acquire private key!")
-
-
 def extract_cert(cert_str, key):
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_str)
     if key_match(cert, key):
@@ -281,7 +261,19 @@ def send_auth(url, nonce, sn, sid):
 
 def process_init(key_path, csr_path, cert_path, sn):
     sid = 0
-    key = prepare_key(key_path)
+
+    key = None
+    if os.path.exists(key_path):
+        logger.debug("Private key file exists.")
+        key = load_key(key_path)
+    if not key:
+        logger.info("Private key file not found. Generating new one.")
+        generate_priv_key_file(key_path)
+        key = load_key(key_path)
+    if not key:
+        logger.critical("Unable to acquire private key!")
+        raise CertgenError("Unable to acquire private key!")
+
     cert = None
     if os.path.exists(cert_path):
         logger.debug("Certificate file exists.")
@@ -290,6 +282,7 @@ def process_init(key_path, csr_path, cert_path, sn):
         state = "VALID"
         return (state, sid, key, cert, None)
     logger.info("Certificate file does not exist. Re-certifying.")
+
     csr = None
     if os.path.exists(csr_path):
         logger.debug("CSR file exist.")
