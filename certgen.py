@@ -287,16 +287,8 @@ def process_init(key_path, csr_path, cert_path, sn):
         logger.debug("Certificate file exists.")
         cert = load_cert(cert_path, key)
     if cert:
-        if cert_expired(cert):
-            logger.info("Certificate is about to expire. Removing..")
-            clear_cert_dir(key_path, csr_path, cert_path)
-            key = prepare_key(key_path)
-            cert = None
-        else:
-            logger.debug("Certificate not expired.")
-            logger.debug("Success, quitting..")
-            exit()
-
+        state = "VALID"
+        return (state, sid, key, cert, None)
     logger.info("Certificate file does not exist. Re-certifying.")
     csr = None
     if os.path.exists(csr_path):
@@ -308,7 +300,7 @@ def process_init(key_path, csr_path, cert_path, sn):
         csr = load_csr(csr_path, key)
     if csr:
         state = "GET"
-        return (state, sid, key, csr)
+        return (state, sid, key, None, csr)
     else:
         logger.critical("Unable to acquire csr!")
         raise CertgenError("Unable to acquire csr!")
@@ -359,18 +351,35 @@ def process_auth(sn, sid, api_url, nonce):
     return state
 
 
+def process_valid(key_path, csr_path, cert_path, cert):
+    if cert_expired(cert):
+        logger.info("Certificate is about to expire. Removing..")
+        clear_cert_dir(key_path, csr_path, cert_path)
+        state = "INIT"
+    else:
+        logger.debug("Certificate not expired.")
+        state = "VALID"
+    return state
+
+
 def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
     state = "INIT"
     while True:
         if state == "INIT":
             logger.debug("---> INIT state")
-            state, sid, key, csr = process_init(key_path, csr_path, cert_path, sn)
+            state, sid, key, cert, csr = process_init(key_path, csr_path, cert_path, sn)
         elif state == "GET":
             logger.debug("---> GET state")
             state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
         elif state == "AUTH":
             logger.debug("---> AUTH state")
             state = process_auth(sn, sid, api_url, nonce)
+        elif state == "VALID":
+            logger.debug("---> VALID state")
+            state = process_valid(key_path, csr_path, cert_path, cert)
+            if state == "VALID":  # if the VALID state stays valid, exit the app
+                logger.debug("Success, quitting..")
+                break
 
 
 def main():
