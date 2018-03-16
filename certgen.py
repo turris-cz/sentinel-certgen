@@ -86,14 +86,13 @@ def load_key(key_path):
         with open(key_path, "r") as key_file:
             key = crypto.load_privatekey(crypto.FILETYPE_PEM, key_file.read())
     except crypto.Error:
-        logger.debug("Private key is inconsistent. Removing..")
+        logger.info("Private key is inconsistent. Removing..")
         os.remove(key_path)
         return None
     if key.check():
-        logger.debug("Private key loaded.")
         return key
     else:
-        logger.debug("Private key is inconsistent. Removing..")
+        logger.info("Private key is inconsistent. Removing..")
         os.remove(key_path)
         return None
 
@@ -106,14 +105,13 @@ def load_cert(cert_path, key):
         with open(cert_path, "r") as cert_file:
             cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read())
     except crypto.Error:
-        logger.debug("Certificate file broken. Removing..")
+        logger.info("Certificate file broken. Removing..")
         os.remove(cert_path)
         return None
     if key_match(cert, key):
-        logger.debug("Certificate loaded.")
         return cert
     else:
-        logger.debug("Certificate public key does not match. Removing..")
+        logger.info("Certificate public key does not match. Removing..")
         os.remove(cert_path)
         return None
 
@@ -126,14 +124,11 @@ def load_csr(csr_path, key):
         with open(csr_path, "r") as csr_file:
             csr = crypto.load_certificate_request(crypto.FILETYPE_PEM, csr_file.read())
     except crypto.Error:
-        logger.debug("CSR file is inconsistent. Removing..")
         os.remove(csr_path)
         return None
     if key_match(csr, key):
-        logger.debug("CSR loaded.")
         return csr
     else:
-        logger.debug("CSR public key does not match. Removing..")
         os.remove(csr_path)
         return None
 
@@ -278,7 +273,6 @@ def process_init(key_path, csr_path, cert_path, sn):
 
     key = None
     if os.path.exists(key_path):
-        logger.debug("Private key file exists.")
         key = load_key(key_path)
     if not key:
         logger.info("Private key file not found. Generating new one.")
@@ -290,7 +284,6 @@ def process_init(key_path, csr_path, cert_path, sn):
 
     cert = None
     if os.path.exists(cert_path):
-        logger.debug("Certificate file exists.")
         cert = load_cert(cert_path, key)
     if cert:
         state = "VALID"
@@ -299,10 +292,8 @@ def process_init(key_path, csr_path, cert_path, sn):
 
     csr = None
     if os.path.exists(csr_path):
-        logger.debug("CSR file exist.")
         csr = load_csr(csr_path, key)
     if not csr:
-        logger.debug("CSR file not found. Generating a new one.")
         generate_csr_file(csr_path, sn, key)
         csr = load_csr(csr_path, key)
     if csr:
@@ -346,7 +337,6 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
         logger.error("Get Fail.")
         state = "INIT"
     elif recv_json.get("status") == "authenticate":
-        logger.debug("Authentication request.")
         sid = recv_json["sid"]
         nonce = recv_json["nonce"]
         state = "AUTH"
@@ -385,7 +375,6 @@ def process_valid(key_path, csr_path, cert_path, cert):
         clear_cert_dir(key_path, csr_path, cert_path)
         state = "INIT"
     else:
-        logger.debug("Certificate not expired.")
         state = "VALID"
     return state
 
@@ -406,7 +395,6 @@ def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
             logger.debug("---> VALID state")
             state = process_valid(key_path, csr_path, cert_path, cert)
             if state == "VALID":  # if the VALID state stays valid, exit the app
-                logger.debug("Success, quitting..")
                 break
 
 
