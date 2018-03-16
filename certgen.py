@@ -24,39 +24,39 @@ logger.addHandler(logging.NullHandler())
 def get_arg_parser():
     """ Returns argument parser object.
     """
-    parser = argparse.ArgumentParser(description='Certgen - client for retrieving Turris:Sentinel certificates')
+    parser = argparse.ArgumentParser(description="Certgen - client for retrieving Turris:Sentinel certificates")
     parser.add_argument(
-        '--certdir',
+        "--certdir",
         nargs=1,
         required=True,
-        help='path to Sentinel certificate location'
+        help="path to Sentinel certificate location"
     )
     parser.add_argument(
-        '-H', '--cert-api-hostname',
+        "-H", "--cert-api-hostname",
         nargs=1,
         required=True,
-        help='Certgen api hostname'
+        help="Certgen api hostname"
     )
     parser.add_argument(
-        '-p', '--cert-api-port',
+        "-p", "--cert-api-port",
         nargs=1,
         required=True,
-        help='Certgen api port'
+        help="Certgen api port"
     )
     parser.add_argument(
-        '-d', '--debug',
-        action='store_true',
-        help='Raise logging level to debug'
+        "-d", "--debug",
+        action="store_true",
+        help="Raise logging level to debug"
     )
     parser.add_argument(
-        '-v', '--verbose',
-        action='store_true',
-        help='Enables logging to console'
+        "-v", "--verbose",
+        action="store_true",
+        help="Enables logging to console"
     )
     parser.add_argument(
-        '--force-renew',
-        action='store_true',
-        help='remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate'
+        "--force-renew",
+        action="store_true",
+        help="remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate"
     )
     return parser
 
@@ -75,7 +75,7 @@ class CertgenError(Exception):
 
 
 def get_crypto_name(cert_dir, sn, ext):
-    return str.join('/', (cert_dir, str.join('.', (str(sn), ext))))
+    return str.join("/", (cert_dir, str.join(".", (str(sn), ext))))
 
 
 def load_key(key_path):
@@ -208,9 +208,9 @@ def send_request(url, req_json):
     """
     # Creating GET request to obtain / check uuid
     req = urllib2.Request(url)
-    req.add_header('Accept', 'application/json')
-    req.add_header('Content-Type', 'application/json')
-    data = json.dumps(req_json).encode('utf8')
+    req.add_header("Accept", "application/json")
+    req.add_header("Content-Type", "application/json")
+    data = json.dumps(req_json).encode("utf8")
 
     # create ssl context
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -228,8 +228,8 @@ def get_digest(nonce):
             ["atsha204cmd", "challenge-response"],
             stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     # the return value is a list
-    # remove '\n' at the and
-    digest = process.communicate(input=nonce+'\n')[0][:-1]
+    # remove "\n" at the and
+    digest = process.communicate(input=nonce+"\n")[0][:-1]
     return digest
 
 
@@ -303,7 +303,7 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
     recv_json = send_get(api_url, csr, sn, sid)
     nonce = None
     state = "GET"
-    if recv_json.get("status") == 'ok':
+    if recv_json.get("status") == "ok":
         cert = extract_cert(recv_json["cert"], key)
         if cert:
             logger.info("New certificate succesfully downloaded.")
@@ -313,19 +313,19 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
             logger.error("Obtained cert key does not match.")
             state = "INIT"
 
-    elif recv_json.get("status") == 'wait':
-        logger.debug("Sleeping for {} seconds".format(recv_json['delay']))
-        time.sleep(recv_json['delay'])
-    elif recv_json.get("status") == 'error':
+    elif recv_json.get("status") == "wait":
+        logger.debug("Sleeping for {} seconds".format(recv_json["delay"]))
+        time.sleep(recv_json["delay"])
+    elif recv_json.get("status") == "error":
         logger.error("Get Error.")
         state = "INIT"
-    elif recv_json.get("status") == 'fail':
+    elif recv_json.get("status") == "fail":
         logger.error("Get Fail.")
         state = "INIT"
-    elif recv_json.get("status") == 'authenticate':
+    elif recv_json.get("status") == "authenticate":
         logger.debug("Authentication request.")
-        sid = recv_json['sid']
-        nonce = recv_json['nonce']
+        sid = recv_json["sid"]
+        nonce = recv_json["nonce"]
         state = "AUTH"
     else:
         logger.error("Get: Unknown error.")
@@ -335,8 +335,8 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
 def process_auth(sn, sid, api_url, nonce):
     recv_json = send_auth(api_url, nonce, sn, sid)
     if recv_json.get("status") == "accepted":
-        logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json['delay']))
-        time.sleep(recv_json['delay'])
+        logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
+        time.sleep(recv_json["delay"])
         state = "GET"
     else:
         logger.error("Auth: Unknown error.")
@@ -382,7 +382,7 @@ def main():
     if args.verbose:
         cl = logging.StreamHandler()
         cl.setLevel(logging.DEBUG)
-        cl.formatter = logging.Formatter('%(levelname)s:%(message)s')
+        cl.formatter = logging.Formatter("%(levelname)s:%(message)s")
         logger.addHandler(cl)
 
     if args.debug:
