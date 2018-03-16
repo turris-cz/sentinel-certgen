@@ -7,7 +7,6 @@ import urllib2
 import ssl
 import json
 import argparse
-import re
 import time
 import datetime
 import logging
@@ -22,30 +21,10 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.NullHandler())
 
 
-def hexa_match(string):
-    """ Check whether the string contains only hexadecimal characters
-    """
-    return not re.compile(r'[^a-fA-f0-9]').search(string)
-
-
-def serial(string):
-    """ Value-checking for argument parser.
-    """
-    if len(string) != 16 or not hexa_match(string):
-        raise argparse.ArgumentTypeError("Serial number must be 16 character long hexadecimal number")
-    return string
-
-
 def get_arg_parser():
     """ Returns argument parser object.
     """
     parser = argparse.ArgumentParser(description='Certgen - client for retrieving Turris:Sentinel certificates')
-    parser.add_argument(
-        '--debug-sn',
-        nargs=1,
-        type=serial,
-        help='emulate serial number for debug purposes. DEBUG-SN is a 16-digit hexadecimal number.'
-    )
     parser.add_argument(
         '--certdir',
         nargs=1,
@@ -407,15 +386,12 @@ def main():
     if args.debug:
         logger.setLevel(logging.DEBUG)
 
-    if args.debug_sn:
-        sn = args.debug_sn[0]
+    process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
+    if process.wait() == 0:
+        sn = process.stdout.read()[:-1]
     else:
-        process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
-        if process.wait() == 0:
-            sn = process.stdout.read()[:-1]
-        else:
-            logging.critical("Atcha failed: sn")
-            exit()
+        logging.critical("Atcha failed: sn")
+        return
     api_url = "https://{}:{}".format(args.cert_api_hostname[0], args.cert_api_port[0])
 
     csr_path = get_crypto_name(args.certdir[0], sn, "csr")
