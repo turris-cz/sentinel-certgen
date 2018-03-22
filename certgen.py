@@ -209,9 +209,18 @@ def send_request(ca_path, url, req_json):
     """
     # Creating GET request to obtain / check uuid
     req = urllib2.Request("https://{}".format(url))
+    # TODO: remove next line before deployment to production
+    if url[0:9] == "127.0.0.1":
+        req = urllib.request.Request("http://{}/{}".format(url, API_VERSION))
     req.add_header("Accept", "application/json")
     req.add_header("Content-Type", "application/json")
     data = json.dumps(req_json).encode("utf8")
+
+    # TODO: remove next section before deployment to production
+    if url[0:9] == "127.0.0.1":
+        resp = urllib2.urlopen(req, data)
+        resp_json = resp.read()
+        return resp_json
 
     # create ssl context
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
