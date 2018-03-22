@@ -208,7 +208,7 @@ def send_request(ca_path, url, req_json):
     """ Send http POST request.
     """
     # Creating GET request to obtain / check uuid
-    req = urllib2.Request(url)
+    req = urllib2.Request("https://{}".format(url))
     req.add_header("Accept", "application/json")
     req.add_header("Content-Type", "application/json")
     data = json.dumps(req_json).encode("utf8")
@@ -423,7 +423,7 @@ def main():
     else:
         logging.critical("Atcha failed: sn")
         return
-    api_url = "https://{}:{}".format(args.cert_api_hostname[0], args.cert_api_port[0])
+    api_url = "{}:{}".format(args.cert_api_hostname[0], args.cert_api_port[0])
 
     csr_path = get_crypto_name(args.certdir[0], sn, "csr")
     cert_path = get_crypto_name(args.certdir[0], sn, "pem")
