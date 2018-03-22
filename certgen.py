@@ -44,6 +44,12 @@ def get_arg_parser():
         help="Certgen api port"
     )
     parser.add_argument(
+        "-a", "--ca-certs",
+        nargs=1,
+        required=True,
+        help="File with CA certificates for TLS connection"
+    )
+    parser.add_argument(
         "-d", "--debug",
         action="store_true",
         help="Raise logging level to debug"
@@ -198,7 +204,7 @@ def save_cert(cert, cert_path):
         cert_file.write(crypto.dump_certificate(type=crypto.FILETYPE_PEM, cert=cert).decode("utf-8"))
 
 
-def send_request(url, req_json):
+def send_request(ca_path, url, req_json):
     """ Send http POST request.
     """
     # Creating GET request to obtain / check uuid
@@ -212,7 +218,7 @@ def send_request(url, req_json):
     ctx.verify_mode = ssl.CERT_REQUIRED
     ctx.set_default_verify_paths()
     ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-    ctx.load_verify_locations("ca.pem")
+    ctx.load_verify_locations(ca_path)
     resp = urllib2.urlopen(req, data, context=ctx)
     resp_json = resp.read()
     return resp_json
@@ -230,7 +236,7 @@ def get_digest(nonce):
     return digest
 
 
-def send_get(url, csr, sn, sid):
+def send_get(ca_path, url, csr, sn, sid):
     """ Send http request in the GET state.
     """
     csr_str = crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8")
@@ -241,11 +247,11 @@ def send_get(url, csr, sn, sid):
         "sid": sid,
         "csr": csr_str,
     }
-    recv = send_request(url, req)
+    recv = send_request(ca_path, url, req)
     return json.loads(recv.decode("utf-8"))
 
 
-def send_auth(url, nonce, sn, sid):
+def send_auth(ca_path, url, nonce, sn, sid):
     """ Send http request in the AUTH state.
     """
     digest = get_digest(nonce)
@@ -256,7 +262,7 @@ def send_auth(url, nonce, sn, sid):
         "sid": sid,
         "digest": digest,
     }
-    recv = send_request(url, req)
+    recv = send_request(ca_path, url, req)
     return json.loads(recv.decode("utf-8"))
 
 
@@ -304,7 +310,7 @@ def process_init(key_path, csr_path, cert_path, sn):
         raise CertgenError("Unable to acquire csr!")
 
 
-def process_get(cert_path, sn, sid, api_url, key, csr):
+def process_get(cert_path, ca_path, sn, sid, api_url, key, csr):
     """ Processing the GET state. In this state the application tries to
     download and save new certificate from Cert-api server. This state may
     continue with three statuses:
@@ -315,7 +321,7 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
         GET: the certification process is still running, we have to wait
         INIT: the received certificate is not valid or some other error occured
     """
-    recv_json = send_get(api_url, csr, sn, sid)
+    recv_json = send_get(ca_path, api_url, csr, sn, sid)
     nonce = None
     if recv_json.get("status") == "ok":
         cert = extract_cert(recv_json["cert"], key)  # extract & consistency check
@@ -345,14 +351,14 @@ def process_get(cert_path, sn, sid, api_url, key, csr):
     return (state, sid, nonce)
 
 
-def process_auth(sn, sid, api_url, nonce):
+def process_auth(ca_path, sn, sid, api_url, nonce):
     """ Processing the AUTH state. In this state the application authenticates to
     the Cert-api server. This state may continue with two statuses:
         GET: authectication was succesfull, we can continue to download the
             new certificate
         INIT: there was an error in the authentication process
     """
-    recv_json = send_auth(api_url, nonce, sn, sid)
+    recv_json = send_auth(ca_path, api_url, nonce, sn, sid)
     if recv_json.get("status") == "accepted":
         logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
         time.sleep(recv_json["delay"])
@@ -379,7 +385,7 @@ def process_valid(key_path, csr_path, cert_path, cert):
     return state
 
 
-def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
+def start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url):
     state = "INIT"
     while True:
         if state == "INIT":  # look for file with consistent certificate
@@ -387,10 +393,10 @@ def start_state_machine(key_path, csr_path, cert_path, sn, api_url):
             state, sid, key, cert, csr = process_init(key_path, csr_path, cert_path, sn)
         elif state == "GET":  # if there is no cert in file, download & save cert form Cert-api
             logger.debug("---> GET state")
-            state, sid, nonce = process_get(cert_path, sn, sid, api_url, key, csr)
+            state, sid, nonce = process_get(cert_path, ca_path, sn, sid, api_url, key, csr)
         elif state == "AUTH":  # if there is no valid cert in Cert-api, ask for a new one
             logger.debug("---> AUTH state")
-            state = process_auth(sn, sid, api_url, nonce)
+            state = process_auth(ca_path, sn, sid, api_url, nonce)
         elif state == "VALID":  # Check certificate expiration
             logger.debug("---> VALID state")
             state = process_valid(key_path, csr_path, cert_path, cert)
@@ -422,11 +428,12 @@ def main():
     csr_path = get_crypto_name(args.certdir[0], sn, "csr")
     cert_path = get_crypto_name(args.certdir[0], sn, "pem")
     key_path = get_crypto_name(args.certdir[0], sn, "key")
+    ca_path = args.ca_certs[0]
 
     if args.force_renew:
         clear_cert_dir(key_path, csr_path, cert_path)
 
-    start_state_machine(key_path, csr_path, cert_path, sn, api_url)
+    start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url)
 
 
 if __name__ == "__main__":
