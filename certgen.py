@@ -16,6 +16,7 @@ KEY_TYPE = crypto.TYPE_RSA
 KEY_LEN = 4096
 MAX_TIME_TO_EXPIRE = 30*24*60*60
 ERROR_WAIT = 5*60
+API_VERSION = "v1"
 
 logger = logging.getLogger("certgen")
 logger.setLevel(logging.INFO)
@@ -251,7 +252,7 @@ def send_get(ca_path, url, csr, sn, sid):
     """
     csr_str = crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8")
     req = {
-        "api_version": "0.1",
+        "api_version": API_VERSION,
         "type": "get_cert",
         "sn": sn,
         "sid": sid,
@@ -266,7 +267,7 @@ def send_auth(ca_path, url, nonce, sn, sid):
     """
     digest = get_digest(nonce)
     req = {
-        "api_version": "0.1",
+        "api_version": API_VERSION,
         "type": "auth",
         "sn": sn,
         "sid": sid,
