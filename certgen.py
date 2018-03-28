@@ -227,7 +227,6 @@ def send_request(ca_path, url, req_json):
     # create ssl context
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.verify_mode = ssl.CERT_REQUIRED
-    ctx.set_default_verify_paths()
     ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
     ctx.load_verify_locations(ca_path)
     resp = urllib2.urlopen(req, data, context=ctx)
