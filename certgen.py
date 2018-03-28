@@ -15,6 +15,7 @@ import logging
 KEY_TYPE = crypto.TYPE_RSA
 KEY_LEN = 4096
 MAX_TIME_TO_EXPIRE = 30*24*60*60
+ERROR_WAIT = 5*60
 
 logger = logging.getLogger("certgen")
 logger.setLevel(logging.INFO)
@@ -348,15 +349,18 @@ def process_get(cert_path, ca_path, sn, sid, api_url, key, csr):
     elif recv_json.get("status") == "error":
         logger.error("Get Error.")
         state = "INIT"
+        time.sleep(ERROR_WAIT)
     elif recv_json.get("status") == "fail":
         logger.error("Get Fail.")
         state = "INIT"
+        time.sleep(ERROR_WAIT)
     elif recv_json.get("status") == "authenticate":
         sid = recv_json["sid"]
         nonce = recv_json["nonce"]
         state = "AUTH"
     else:
         logger.error("Get: Unknown error.")
+        state = "INIT"
     return (state, sid, nonce)
 
 
@@ -372,6 +376,14 @@ def process_auth(ca_path, sn, sid, api_url, nonce):
         logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
         time.sleep(recv_json["delay"])
         state = "GET"
+    elif recv_json.get("status") == "error":
+        logger.error("Auth Error.")
+        state = "INIT"
+        time.sleep(ERROR_WAIT)
+    elif recv_json.get("status") == "fail":
+        logger.error("Auth Fail.")
+        state = "INIT"
+        time.sleep(ERROR_WAIT)
     else:
         logger.error("Auth: Unknown error.")
         state = "INIT"
