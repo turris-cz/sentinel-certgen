@@ -1,19 +1,22 @@
 #!/usr/bin/env python
 
-from OpenSSL import crypto
+import time
 import os
 import subprocess
 import urllib2
 import ssl
-import json
 import argparse
-import time
-import datetime
 import logging
+import json
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
 
 
-KEY_TYPE = crypto.TYPE_RSA
-KEY_LEN = 4096
+KEY_TYPE = ec.SECP256R1()
 MAX_TIME_TO_EXPIRE = 30*24*60*60
 ERROR_WAIT = 5*60
 API_VERSION = "v1"
@@ -73,9 +76,18 @@ def key_match(obj, key):
     """ Compares two public keys in different formats and returns true if they
     match.
     """
-    obj_pubkey_str = crypto.dump_publickey(type=crypto.FILETYPE_PEM, pkey=obj.get_pubkey()).decode("utf-8")
-    key_pubkey_str = crypto.dump_publickey(type=crypto.FILETYPE_PEM, pkey=key).decode("utf-8")
-    return obj_pubkey_str == key_pubkey_str
+    try:
+        obj_str = obj.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        key_str = key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return obj_str == key_str
+    except (ValueError, AssertionError):
+        return False
 
 
 class CertgenError(Exception):
@@ -91,15 +103,14 @@ def load_key(key_path):
     the filesystem.
     """
     try:
-        with open(key_path, "r") as key_file:
-            key = crypto.load_privatekey(crypto.FILETYPE_PEM, key_file.read())
-    except crypto.Error:
-        logger.info("Private key is inconsistent. Removing..")
-        os.remove(key_path)
-        return None
-    if key.check():
+        with open(key_path, 'rb') as f:
+            key = serialization.load_pem_private_key(
+                data=f.read(),
+                password=None,
+                backend=default_backend()
+                )
         return key
-    else:
+    except (ValueError, AssertionError):
         logger.info("Private key is inconsistent. Removing..")
         os.remove(key_path)
         return None
@@ -110,9 +121,9 @@ def load_cert(cert_path, key):
     the filesystem.
     """
     try:
-        with open(cert_path, "r") as cert_file:
-            cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read())
-    except crypto.Error:
+        with open(cert_path, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+    except (ValueError, AssertionError):
         logger.info("Certificate file broken. Removing..")
         os.remove(cert_path)
         return None
@@ -129,9 +140,9 @@ def load_csr(csr_path, key):
     the filesystem.
     """
     try:
-        with open(csr_path, "r") as csr_file:
-            csr = crypto.load_certificate_request(crypto.FILETYPE_PEM, csr_file.read())
-    except crypto.Error:
+        with open(csr_path, "rb") as f:
+            csr = x509.load_pem_x509_csr(f.read(), default_backend())
+    except (ValueError, AssertionError):
         os.remove(csr_path)
         return None
     if key_match(csr, key):
@@ -142,7 +153,7 @@ def load_csr(csr_path, key):
 
 
 def extract_cert(cert_str, key):
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_str)
+    cert = x509.load_pem_x509_certificate(cert_str.encode("utf-8"), default_backend())
     if key_match(cert, key):
         return cert
     else:
@@ -150,9 +161,7 @@ def extract_cert(cert_str, key):
 
 
 def cert_expired(cert):
-    due_date = cert.get_notAfter().decode("utf-8")
-    due_date = datetime.datetime.strptime(due_date, "%Y%m%d%H%M%SZ")
-    due_date = time.mktime(due_date.timetuple())
+    due_date = time.mktime(cert.not_valid_after.timetuple())
     now = time.time()
     return due_date - now < MAX_TIME_TO_EXPIRE
 
@@ -170,46 +179,39 @@ def clear_cert_dir(key_path, csr_path, cert_path):
 
 
 def generate_priv_key_file(key_path):
-    key = crypto.PKey()
-    key.generate_key(KEY_TYPE, KEY_LEN)
-    with open(key_path, "w") as key_file:
-        key_file.write(crypto.dump_privatekey(type=crypto.FILETYPE_PEM, pkey=key).decode("utf-8"))
+    key = ec.generate_private_key(
+        KEY_TYPE,
+        backend=default_backend()
+    )
+    with open(key_path, "wb") as f:
+        f.write(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
 
 
 def generate_csr_file(csr_path, sn, key):
-    csr = crypto.X509Req()
-    csr.get_subject().CN = sn
-    csr.get_subject().countryName = "cz"
-    csr.get_subject().stateOrProvinceName = "Prague"
-    csr.get_subject().localityName = "Prague"
-    csr.get_subject().organizationName = "CZ.NIC"
-    csr.get_subject().organizationalUnitName = "Turris"
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, sn.decode("utf-8")),
+    ]))
+    csr = csr.sign(key, hashes.SHA256(), default_backend())
 
-    # Add in extensions
-    x509_extensions = ([
-        crypto.X509Extension(b"keyUsage", False, b"Digital Signature, Non Repudiation, Key Encipherment"),
-        crypto.X509Extension(b"basicConstraints", False, b"CA:FALSE")
-    ])
-    csr.add_extensions(x509_extensions)
-
-    csr.set_pubkey(key)
-    csr.sign(key, "sha256")
-
-    with open(csr_path, "w") as csr_file:
-        csr_file.write(crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8"))
+    with open(csr_path, "wb") as f:
+        f.write(csr.public_bytes(serialization.Encoding.PEM))
 
 
 def save_cert(cert, cert_path):
     """ Save received certificate to a file.
     """
-    with open(cert_path, "w") as cert_file:
-        cert_file.write(crypto.dump_certificate(type=crypto.FILETYPE_PEM, cert=cert).decode("utf-8"))
+    with open(cert_path, "wb") as f:
+        f.write(cert.public_bytes(encoding=serialization.Encoding.PEM))
 
 
 def send_request(ca_path, url, req_json):
     """ Send http POST request.
     """
-    # Creating GET request to obtain / check uuid
+    # Creating GET request to obtain
     req = urllib2.Request("https://{}".format(url))
     # TODO: remove next line before deployment to production
     if url[0:9] == "127.0.0.1":
@@ -249,7 +251,7 @@ def get_digest(nonce):
 def send_get(ca_path, url, csr, sn, sid):
     """ Send http request in the GET state.
     """
-    csr_str = crypto.dump_certificate_request(type=crypto.FILETYPE_PEM, req=csr).decode("utf-8")
+    csr_str = csr.public_bytes(serialization.Encoding.PEM)
     req = {
         "api_version": API_VERSION,
         "type": "get_cert",
