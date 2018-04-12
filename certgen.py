@@ -95,7 +95,7 @@ class CertgenError(Exception):
 
 
 def get_crypto_name(cert_dir, sn, ext):
-    return str.join("/", (cert_dir, str.join(".", (str(sn), ext))))
+    return os.path.join(cert_dir, str.join(".", (str(sn), ext)))
 
 
 def load_key(key_path):
