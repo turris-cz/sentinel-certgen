@@ -98,7 +98,7 @@ def get_crypto_name(cert_dir, sn, ext):
     return os.path.join(cert_dir, str.join(".", (str(sn), ext)))
 
 
-def load_key(key_path):
+def load_or_remove_key(key_path):
     """ Load the private key from a file or, if it is damaged, remove it from
     the filesystem.
     """
@@ -116,7 +116,7 @@ def load_key(key_path):
         return None
 
 
-def load_cert(cert_path, key):
+def load_or_remove_cert(cert_path, key):
     """ Load the certificate from a file or, if it is damaged, remove it from
     the filesystem.
     """
@@ -135,7 +135,7 @@ def load_cert(cert_path, key):
         return None
 
 
-def load_csr(csr_path, key):
+def load_or_remove_csr(csr_path, key):
     """ Load the certificate from a file or, if it is damaged, remove it from
     the filesystem.
     """
@@ -291,18 +291,18 @@ def process_init(key_path, csr_path, cert_path, sn):
 
     key = None
     if os.path.exists(key_path):
-        key = load_key(key_path)
+        key = load_or_remove_key(key_path)
     if not key:
         logger.info("Private key file not found. Generating new one.")
         generate_priv_key_file(key_path)
-        key = load_key(key_path)
+        key = load_or_remove_key(key_path)
     if not key:
         logger.critical("Unable to acquire private key!")
         raise CertgenError("Unable to acquire private key!")
 
     cert = None
     if os.path.exists(cert_path):
-        cert = load_cert(cert_path, key)
+        cert = load_or_remove_cert(cert_path, key)
     if cert:
         state = "VALID"
         return (state, sid, key, cert, None)
@@ -310,10 +310,10 @@ def process_init(key_path, csr_path, cert_path, sn):
 
     csr = None
     if os.path.exists(csr_path):
-        csr = load_csr(csr_path, key)
+        csr = load_or_remove_csr(csr_path, key)
     if not csr:
         generate_csr_file(csr_path, sn, key)
-        csr = load_csr(csr_path, key)
+        csr = load_or_remove_csr(csr_path, key)
     if csr:
         state = "GET"
         return (state, sid, key, None, csr)
