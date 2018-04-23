@@ -65,7 +65,7 @@ def get_arg_parser():
         help="Enables logging to console"
     )
     parser.add_argument(
-        "--force-renew",
+        "--regen-key",
         action="store_true",
         help="remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate"
     )
@@ -453,7 +453,7 @@ def main():
     key_path = get_crypto_name(args.certdir[0], sn, "key")
     ca_path = args.ca_certs[0]
 
-    if args.force_renew:
+    if args.regen_key:
         clear_cert_dir(key_path, csr_path, cert_path)
 
     start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url)
