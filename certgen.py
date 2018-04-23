@@ -20,6 +20,7 @@ KEY_TYPE = ec.SECP256R1()
 MAX_TIME_TO_EXPIRE = 30*24*60*60
 ERROR_WAIT = 5*60
 API_VERSION = "v1"
+RENEW_WAIT = 10
 
 logger = logging.getLogger("certgen")
 logger.setLevel(logging.INFO)
@@ -63,6 +64,11 @@ def get_arg_parser():
         "-v", "--verbose",
         action="store_true",
         help="Enables logging to console"
+    )
+    parser.add_argument(
+        "-n", "--renew",
+        action="store_true",
+        help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key"
     )
     parser.add_argument(
         "--regen-key",
@@ -248,7 +254,7 @@ def get_digest(nonce):
     return digest
 
 
-def send_get(ca_path, url, csr, sn, sid):
+def send_get(ca_path, url, csr, sn, sid, flags):
     """ Send http request in the GET state.
     """
     csr_str = csr.public_bytes(serialization.Encoding.PEM)
@@ -258,6 +264,7 @@ def send_get(ca_path, url, csr, sn, sid):
         "sn": sn,
         "sid": sid,
         "csr": csr_str,
+        "flags": list(flags),
     }
     recv = send_request(ca_path, url, req)
     return json.loads(recv.decode("utf-8"))
@@ -278,7 +285,12 @@ def send_auth(ca_path, url, nonce, sn, sid):
     return json.loads(recv.decode("utf-8"))
 
 
-def process_init(key_path, csr_path, cert_path, sn):
+def remove_flag_renew(flags):
+    if "renew" in flags:
+        flags.remove("renew")
+
+
+def process_init(key_path, csr_path, cert_path, sn, flags):
     """ Processing the initial state. In this state, private key and certicate
     are loaded from the certificate directory. If something in the process fails
     the private key may be re-generated and a certificate signing request is
@@ -296,6 +308,7 @@ def process_init(key_path, csr_path, cert_path, sn):
         logger.info("Private key file not found. Generating new one.")
         generate_priv_key_file(key_path)
         key = load_or_remove_key(key_path)
+        remove_flag_renew(flags)
     if not key:
         logger.critical("Unable to acquire private key!")
         raise CertgenError("Unable to acquire private key!")
@@ -303,10 +316,18 @@ def process_init(key_path, csr_path, cert_path, sn):
     cert = None
     if os.path.exists(cert_path):
         cert = load_or_remove_cert(cert_path, key)
-    if cert:
-        state = "VALID"
-        return (state, sid, key, cert, None)
-    logger.info("Certificate file does not exist. Re-certifying.")
+    if not cert:
+        remove_flag_renew(flags)
+        cert_sn = 0
+    else:
+        if "renew" not in flags:
+            cert_sn = 0
+            state = "VALID"
+            return (state, sid, key, cert, None, cert_sn)
+        else:
+            cert_sn = cert.serial_number
+
+    logger.info("Certificate file does not exist or is to be renewed. Re-certifying.")
 
     csr = None
     if os.path.exists(csr_path):
@@ -316,13 +337,13 @@ def process_init(key_path, csr_path, cert_path, sn):
         csr = load_or_remove_csr(csr_path, key)
     if csr:
         state = "GET"
-        return (state, sid, key, None, csr)
+        return (state, sid, key, None, csr, cert_sn)
     else:
         logger.critical("Unable to acquire csr!")
         raise CertgenError("Unable to acquire csr!")
 
 
-def process_get(cert_path, ca_path, sn, sid, api_url, key, csr):
+def process_get(cert_path, ca_path, sn, sid, api_url, key, csr, flags, cert_sn):
     """ Processing the GET state. In this state the application tries to
     download and save new certificate from Cert-api server. This state may
     continue with three statuses:
@@ -333,14 +354,19 @@ def process_get(cert_path, ca_path, sn, sid, api_url, key, csr):
         GET: the certification process is still running, we have to wait
         INIT: the received certificate is not valid or some other error occured
     """
-    recv_json = send_get(ca_path, api_url, csr, sn, sid)
+    recv_json = send_get(ca_path, api_url, csr, sn, sid, flags)
     nonce = None
     if recv_json.get("status") == "ok":
         cert = extract_cert(recv_json["cert"], key)  # extract & consistency check
         if cert:
-            logger.info("New certificate succesfully downloaded.")
-            save_cert(cert, cert_path)
-            state = "INIT"
+            if cert.serial_number != cert_sn:
+                logger.info("New certificate succesfully downloaded.")
+                save_cert(cert, cert_path)
+                state = "INIT"
+            else:
+                logger.debug("New cert not yet available.  Sleeping for {} seconds".format(RENEW_WAIT))
+                time.sleep(RENEW_WAIT)
+                state = "GET"
         else:
             logger.error("Obtained cert key does not match.")
             state = "INIT"
@@ -366,7 +392,7 @@ def process_get(cert_path, ca_path, sn, sid, api_url, key, csr):
     return (state, sid, nonce)
 
 
-def process_auth(ca_path, sn, sid, api_url, nonce):
+def process_auth(ca_path, sn, sid, api_url, nonce, flags):
     """ Processing the AUTH state. In this state the application authenticates to
     the Cert-api server. This state may continue with two statuses:
         GET: authectication was succesfull, we can continue to download the
@@ -375,6 +401,7 @@ def process_auth(ca_path, sn, sid, api_url, nonce):
     """
     recv_json = send_auth(ca_path, api_url, nonce, sn, sid)
     if recv_json.get("status") == "accepted":
+        remove_flag_renew(flags)
         logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
         time.sleep(recv_json["delay"])
         state = "GET"
@@ -408,21 +435,21 @@ def process_valid(key_path, csr_path, cert_path, cert):
     return state
 
 
-def start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url):
+def start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags):
     state = "INIT"
     while True:
         if state == "INIT":  # look for file with consistent certificate
             logger.debug("---> INIT state")
-            state, sid, key, cert, csr = process_init(key_path, csr_path, cert_path, sn)
+            state, sid, key, cert, csr, cert_sn = process_init(key_path, csr_path, cert_path, sn, flags)
         elif state == "GET":  # if there is no cert in file, download & save cert form Cert-api
             logger.debug("---> GET state")
-            state, sid, nonce = process_get(cert_path, ca_path, sn, sid, api_url, key, csr)
+            state, sid, nonce = process_get(cert_path, ca_path, sn, sid, api_url, key, csr, flags, cert_sn)
         elif state == "AUTH":  # if there is no valid cert in Cert-api, ask for a new one
             logger.debug("---> AUTH state")
-            state = process_auth(ca_path, sn, sid, api_url, nonce)
+            state = process_auth(ca_path, sn, sid, api_url, nonce, flags)
         elif state == "VALID":  # Check certificate expiration
             logger.debug("---> VALID state")
-            state = process_valid(key_path, csr_path, cert_path, cert)
+            state = process_valid(key_path, csr_path, cert_path, cert, flags)
             if state == "VALID":  # if the VALID state stays valid, exit the app
                 break
 
@@ -456,7 +483,13 @@ def main():
     if args.regen_key:
         clear_cert_dir(key_path, csr_path, cert_path)
 
-    start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url)
+    flags = set()
+    if not args.regen_key and args.renew:
+        if os.path.exists(csr_path):
+            os.remove(csr_path)
+        flags.add("renew")
+
+    start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags)
 
 
 if __name__ == "__main__":
