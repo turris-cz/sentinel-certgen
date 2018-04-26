@@ -117,7 +117,7 @@ def load_or_remove_key(key_path):
                 )
         return key
     except (ValueError, AssertionError):
-        logger.info("Private key is inconsistent. Removing..")
+        logger.info("Private key is inconsistent. Removing...")
         os.remove(key_path)
         return None
 
@@ -130,13 +130,13 @@ def load_or_remove_cert(cert_path, key):
         with open(cert_path, "rb") as f:
             cert = x509.load_pem_x509_certificate(f.read(), default_backend())
     except (ValueError, AssertionError):
-        logger.info("Certificate file broken. Removing..")
+        logger.info("Certificate file broken. Removing...")
         os.remove(cert_path)
         return None
     if key_match(cert, key):
         return cert
     else:
-        logger.info("Certificate public key does not match. Removing..")
+        logger.info("Certificate public key does not match. Removing...")
         os.remove(cert_path)
         return None
 
@@ -375,11 +375,11 @@ def process_get(cert_path, ca_path, sn, sid, api_url, key, csr, flags, cert_sn):
         time.sleep(recv_json["delay"])
         state = "GET"
     elif recv_json.get("status") == "error":
-        logger.error("Get Error.")
+        logger.error("Get Error. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
         state = "INIT"
         time.sleep(ERROR_WAIT)
     elif recv_json.get("status") == "fail":
-        logger.error("Get Fail.")
+        logger.error("Get Fail. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
         state = "INIT"
         time.sleep(ERROR_WAIT)
     elif recv_json.get("status") == "authenticate":
@@ -406,11 +406,11 @@ def process_auth(ca_path, sn, sid, api_url, nonce, flags):
         time.sleep(recv_json["delay"])
         state = "GET"
     elif recv_json.get("status") == "error":
-        logger.error("Auth Error.")
+        logger.error("Auth Error. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
         state = "INIT"
         time.sleep(ERROR_WAIT)
     elif recv_json.get("status") == "fail":
-        logger.error("Auth Fail.")
+        logger.error("Auth Fail. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
         state = "INIT"
         time.sleep(ERROR_WAIT)
     else:
@@ -427,7 +427,7 @@ def process_valid(key_path, csr_path, cert_path, cert):
         INIT: the certificate fully or nearly expired, it will be removed
     """
     if cert_expired(cert):
-        logger.info("Certificate is about to expire. Removing..")
+        logger.info("Certificate is about to expire. Removing...")
         clear_cert_dir(key_path, csr_path, cert_path)
         state = "INIT"
     else:
@@ -471,7 +471,7 @@ def main():
     if process.wait() == 0:
         sn = process.stdout.read()[:-1]
     else:
-        logging.critical("Atcha failed: sn")
+        logging.critical("ATSHA204 failed: sn")
         return
     api_url = "{}:{}".format(args.cert_api_hostname[0], args.cert_api_port[0])
 
