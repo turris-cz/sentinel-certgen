@@ -169,7 +169,13 @@ def extract_cert(cert_str, key):
 def cert_expired(cert):
     due_date = time.mktime(cert.not_valid_after.timetuple())
     now = time.time()
-    return due_date - now < MAX_TIME_TO_EXPIRE
+    return due_date < now
+
+
+def cert_to_expire(cert):
+    due_date = time.mktime(cert.not_valid_after.timetuple())
+    now = time.time()
+    return due_date < (now + MAX_TIME_TO_EXPIRE)
 
 
 def clear_cert_dir(key_path, csr_path, cert_path):
@@ -419,17 +425,29 @@ def process_auth(ca_path, sn, sid, api_url, nonce, flags):
     return state
 
 
-def process_valid(key_path, csr_path, cert_path, cert):
+def process_valid(key_path, csr_path, cert_path, cert, flags):
     """ Processing the VALID state. In this state the application checks the
     expiracy of the certificate. This state may continue with two statuses:
         VALID: the certificate did not expired and is not going to expire in
             within a defined time
         INIT: the certificate fully or nearly expired, it will be removed
+            or/and replaced by a new one.
     """
     if cert_expired(cert):
-        logger.info("Certificate is about to expire. Removing...")
-        clear_cert_dir(key_path, csr_path, cert_path)
+        logger.info("Certificate expired. Removing...")
+        if os.path.exists(csr_path):
+            os.remove(csr_path)
+        if os.path.exists(cert_path):
+            os.remove(cert_path)
         state = "INIT"
+        return state
+
+    if cert_to_expire(cert):
+        flags.add("renew")
+        logger.info("Certificate to expire. Renew flagged.")
+        state = "INIT"
+        return state
+
     else:
         state = "VALID"
     return state
