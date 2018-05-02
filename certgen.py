@@ -7,6 +7,7 @@ import urllib2
 import ssl
 import argparse
 import logging
+import logging.handlers
 import json
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
@@ -47,12 +48,9 @@ def get_arg_parser():
                         nargs=1,
                         required=True,
                         help="File with CA certificates for TLS connection")
-    parser.add_argument("-d", "--debug",
-                        action="store_true",
-                        help="Raise logging level to debug")
     parser.add_argument("-v", "--verbose",
                         action="store_true",
-                        help="Enables logging to console")
+                        help="Raise console logging level to debug.")
     parser.add_argument("-n", "--renew",
                         action="store_true",
                         help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key")
@@ -450,14 +448,23 @@ def main():
     parser = get_arg_parser()
     args = parser.parse_args()
 
-    if args.verbose:
-        cl = logging.StreamHandler()
-        cl.setLevel(logging.DEBUG)
-        cl.formatter = logging.Formatter("%(levelname)s:%(message)s")
-        logger.addHandler(cl)
+    formatter = logging.Formatter("sentinel: %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+                                  "%Y-%m-%d %H:%M:%S")
+    time_formatter = logging.Formatter("[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+                                       "%Y-%m-%d %H:%M:%S")
+    syslog_handler = logging.handlers.SysLogHandler(address="/dev/log")
+    syslog_handler.setFormatter(formatter)
+    syslog_handler.setLevel(logging.INFO)
+    logger.addHandler(syslog_handler)
 
-    if args.debug:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_handler.setFormatter(time_formatter)
+    logger.addHandler(console_handler)
+
+    if args.verbose:
         logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
 
     process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
     if process.wait() == 0:
