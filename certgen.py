@@ -31,50 +31,34 @@ def get_arg_parser():
     """ Returns argument parser object.
     """
     parser = argparse.ArgumentParser(description="Certgen - client for retrieving Turris:Sentinel certificates")
-    parser.add_argument(
-        "--certdir",
-        nargs=1,
-        required=True,
-        help="path to Sentinel certificate location"
-    )
-    parser.add_argument(
-        "-H", "--cert-api-hostname",
-        nargs=1,
-        required=True,
-        help="Certgen api hostname"
-    )
-    parser.add_argument(
-        "-p", "--cert-api-port",
-        nargs=1,
-        required=True,
-        help="Certgen api port"
-    )
-    parser.add_argument(
-        "-a", "--ca-certs",
-        nargs=1,
-        required=True,
-        help="File with CA certificates for TLS connection"
-    )
-    parser.add_argument(
-        "-d", "--debug",
-        action="store_true",
-        help="Raise logging level to debug"
-    )
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enables logging to console"
-    )
-    parser.add_argument(
-        "-n", "--renew",
-        action="store_true",
-        help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key"
-    )
-    parser.add_argument(
-        "--regen-key",
-        action="store_true",
-        help="remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate"
-    )
+    parser.add_argument("--certdir",
+                        nargs=1,
+                        required=True,
+                        help="path to Sentinel certificate location")
+    parser.add_argument("-H", "--cert-api-hostname",
+                        nargs=1,
+                        required=True,
+                        help="Certgen api hostname")
+    parser.add_argument("-p", "--cert-api-port",
+                        nargs=1,
+                        required=True,
+                        help="Certgen api port")
+    parser.add_argument("-a", "--ca-certs",
+                        nargs=1,
+                        required=True,
+                        help="File with CA certificates for TLS connection")
+    parser.add_argument("-d", "--debug",
+                        action="store_true",
+                        help="Raise logging level to debug")
+    parser.add_argument("-v", "--verbose",
+                        action="store_true",
+                        help="Enables logging to console")
+    parser.add_argument("-n", "--renew",
+                        action="store_true",
+                        help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key")
+    parser.add_argument("--regen-key",
+                        action="store_true",
+                        help="remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate")
     return parser
 
 
@@ -83,14 +67,10 @@ def key_match(obj, key):
     match.
     """
     try:
-        obj_str = obj.public_key().public_bytes(
-            serialization.Encoding.PEM,
-            serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        key_str = key.public_key().public_bytes(
-            serialization.Encoding.PEM,
-            serialization.PublicFormat.SubjectPublicKeyInfo
-        )
+        obj_str = obj.public_key().public_bytes(serialization.Encoding.PEM,
+                                                serialization.PublicFormat.SubjectPublicKeyInfo)
+        key_str = key.public_key().public_bytes(serialization.Encoding.PEM,
+                                                serialization.PublicFormat.SubjectPublicKeyInfo)
         return obj_str == key_str
     except (ValueError, AssertionError):
         return False
@@ -110,11 +90,9 @@ def load_or_remove_key(key_path):
     """
     try:
         with open(key_path, 'rb') as f:
-            key = serialization.load_pem_private_key(
-                data=f.read(),
-                password=None,
-                backend=default_backend()
-                )
+            key = serialization.load_pem_private_key(data=f.read(),
+                                                     password=None,
+                                                     backend=default_backend())
         return key
     except (ValueError, AssertionError):
         logger.info("Private key is inconsistent. Removing...")
@@ -191,16 +169,12 @@ def clear_cert_dir(key_path, csr_path, cert_path):
 
 
 def generate_priv_key_file(key_path):
-    key = ec.generate_private_key(
-        KEY_TYPE,
-        backend=default_backend()
-    )
+    key = ec.generate_private_key(KEY_TYPE,
+                                  backend=default_backend())
     with open(key_path, "wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        ))
+        f.write(key.private_bytes(encoding=serialization.Encoding.PEM,
+                                  format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                  encryption_algorithm=serialization.NoEncryption()))
 
 
 def generate_csr_file(csr_path, sn, key):
@@ -251,9 +225,9 @@ def send_request(ca_path, url, req_json):
 def get_digest(nonce):
     """ Returns atsha-based digest based on nonce.
     """
-    process = subprocess.Popen(
-            ["atsha204cmd", "challenge-response"],
-            stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    process = subprocess.Popen(["atsha204cmd", "challenge-response"],
+                               stdout=subprocess.PIPE,
+                               stdin=subprocess.PIPE)
     # the return value is a list
     # remove "\n" at the and
     digest = process.communicate(input=nonce+"\n")[0][:-1]
