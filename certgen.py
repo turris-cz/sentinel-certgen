@@ -196,7 +196,7 @@ def send_request(ca_path, url, req_json):
     """ Send http POST request.
     """
     # Creating GET request to obtain
-    req = urllib.request.Request("https://{}".format(url))
+    req = urllib.request.Request("https://{}/{}".format(url, API_VERSION))
     # TODO: remove next line before deployment to production
     if url[0:9] == "127.0.0.1":
         req = urllib.request.Request("http://{}/{}".format(url, API_VERSION))
@@ -239,7 +239,6 @@ def send_get(ca_path, url, csr, sn, sid, flags):
     """
     csr_str = csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
     req = {
-        "api_version": API_VERSION,
         "type": "get_cert",
         "sn": sn,
         "sid": sid,
@@ -255,7 +254,6 @@ def send_auth(ca_path, url, nonce, sn, sid):
     """
     digest = get_digest(nonce)
     req = {
-        "api_version": API_VERSION,
         "type": "auth",
         "sn": sn,
         "sid": sid,
