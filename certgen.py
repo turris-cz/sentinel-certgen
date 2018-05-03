@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import time
 import os
 import subprocess
-import urllib2
+import urllib.request
 import ssl
 import argparse
 import logging
@@ -177,7 +177,7 @@ def generate_priv_key_file(key_path):
 
 def generate_csr_file(csr_path, sn, key):
     csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, sn.decode("utf-8")),
+        x509.NameAttribute(NameOID.COMMON_NAME, sn),
     ]))
     csr = csr.sign(key, hashes.SHA256(), default_backend())
 
@@ -196,7 +196,7 @@ def send_request(ca_path, url, req_json):
     """ Send http POST request.
     """
     # Creating GET request to obtain
-    req = urllib2.Request("https://{}".format(url))
+    req = urllib.request.Request("https://{}".format(url))
     # TODO: remove next line before deployment to production
     if url[0:9] == "127.0.0.1":
         req = urllib.request.Request("http://{}/{}".format(url, API_VERSION))
@@ -206,7 +206,7 @@ def send_request(ca_path, url, req_json):
 
     # TODO: remove next section before deployment to production
     if url[0:9] == "127.0.0.1":
-        resp = urllib2.urlopen(req, data)
+        resp = urllib.request.urlopen(req, data)
         resp_json = resp.read()
         return resp_json
 
@@ -215,7 +215,7 @@ def send_request(ca_path, url, req_json):
     ctx.verify_mode = ssl.CERT_REQUIRED
     ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
     ctx.load_verify_locations(ca_path)
-    resp = urllib2.urlopen(req, data, context=ctx)
+    resp = urllib.request.urlopen(req, data, context=ctx)
     resp_json = resp.read()
     return resp_json
 
@@ -226,16 +226,18 @@ def get_digest(nonce):
     process = subprocess.Popen(["atsha204cmd", "challenge-response"],
                                stdout=subprocess.PIPE,
                                stdin=subprocess.PIPE)
+    nonce = "{}\n".format(nonce).encode("utf-8")
     # the return value is a list
     # remove "\n" at the and
-    digest = process.communicate(input=nonce+"\n")[0][:-1]
+    digest = process.communicate(input=nonce)[0][:-1]
+    digest = digest.decode("utf-8")
     return digest
 
 
 def send_get(ca_path, url, csr, sn, sid, flags):
     """ Send http request in the GET state.
     """
-    csr_str = csr.public_bytes(serialization.Encoding.PEM)
+    csr_str = csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
     req = {
         "api_version": API_VERSION,
         "type": "get_cert",
@@ -468,7 +470,7 @@ def main():
 
     process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
     if process.wait() == 0:
-        sn = process.stdout.read()[:-1]
+        sn = process.stdout.read()[:-1].decode("utf-8")
     else:
         logging.critical("ATSHA204 failed: sn")
         return
