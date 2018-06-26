@@ -255,7 +255,7 @@ def send_auth(ca_path, url, nonce, sn, sid):
     digest = get_digest(nonce)
     req = {
         "type": "auth",
-        "auth_type": "atsha",
+        "auth_type": "atsha204",
         "sn": sn,
         "sid": sid,
         "digest": digest,
