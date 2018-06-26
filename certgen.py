@@ -17,7 +17,7 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 
 
-KEY_TYPE = ec.SECP256R1()
+ELLIPTIC_CURVE = ec.SECP256R1()
 MAX_TIME_TO_EXPIRE = 30*24*60*60
 ERROR_WAIT = 5*60
 API_VERSION = "v1"
@@ -167,7 +167,7 @@ def clear_cert_dir(key_path, csr_path, cert_path):
 
 
 def generate_priv_key_file(key_path):
-    key = ec.generate_private_key(KEY_TYPE,
+    key = ec.generate_private_key(curve=ELLIPTIC_CURVE,
                                   backend=default_backend())
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(encoding=serialization.Encoding.PEM,
@@ -176,7 +176,7 @@ def generate_priv_key_file(key_path):
 
 
 def generate_csr_file(csr_path, sn, key):
-    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+    csr = x509.CertificateSigningRequestBuilder(subject_name=x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, sn),
     ]))
     csr = csr.sign(key, hashes.SHA256(), default_backend())
