@@ -279,7 +279,7 @@ def process_init(key_path, csr_path, cert_path, sn, flags):
         GET - when no consistent cert is present
         VALID - when the cert is present and consistent
     """
-    sid = 0
+    sid = ""
 
     key = None
     if os.path.exists(key_path):
