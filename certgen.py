@@ -240,6 +240,7 @@ def send_get(ca_path, url, csr, sn, sid, flags):
     csr_str = csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
     req = {
         "type": "get_cert",
+        "auth_type": "atsha204",
         "sn": sn,
         "sid": sid,
         "csr": csr_str,
