@@ -49,20 +49,15 @@ def get_arg_parser():
     """
     parser = argparse.ArgumentParser(description="Certgen - client for retrieving Turris:Sentinel certificates")
     parser.add_argument("--certdir",
-                        nargs=1,
                         required=True,
                         help="path to Sentinel certificate location")
     parser.add_argument("-H", "--cert-api-hostname",
-                        nargs=1,
-                        required=True,
+                        default="sentinel.turris.cz",
                         help="Certgen api hostname")
     parser.add_argument("-p", "--cert-api-port",
-                        nargs=1,
-                        required=True,
+                        default="443",
                         help="Certgen api port")
-    parser.add_argument("-a", "--ca-certs",
-                        nargs=1,
-                        required=True,
+    parser.add_argument("-a", "--capath",
                         help="File with CA certificates for TLS connection")
     parser.add_argument("-v", "--verbose",
                         action="store_true",
@@ -213,24 +208,17 @@ def send_request(ca_path, url, req_json):
     """
     # Creating GET request to obtain
     req = urllib.request.Request("https://{}/{}".format(url, API_VERSION))
-    # TODO: remove next line before deployment to production
-    if url[0:9] == "127.0.0.1":
-        req = urllib.request.Request("http://{}/{}".format(url, API_VERSION))
     req.add_header("Accept", "application/json")
     req.add_header("Content-Type", "application/json")
     data = json.dumps(req_json).encode("utf8")
 
-    # TODO: remove next section before deployment to production
-    if url[0:9] == "127.0.0.1":
-        resp = urllib.request.urlopen(req, data)
-        resp_json = resp.read()
-        return resp_json
-
     # create ssl context
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.verify_mode = ssl.CERT_REQUIRED
-    ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-    ctx.load_verify_locations(ca_path)
+    if ca_path:
+        ctx.load_verify_locations(ca_path)
+    else:
+        ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
     resp = urllib.request.urlopen(req, data, context=ctx)
     resp_json = resp.read()
     return resp_json
@@ -490,12 +478,12 @@ def main():
     else:
         logging.critical("ATSHA204 failed: sn")
         return
-    api_url = "{}:{}".format(args.cert_api_hostname[0], args.cert_api_port[0])
+    api_url = "{}:{}".format(args.cert_api_hostname, args.cert_api_port)
 
-    csr_path = get_crypto_name(args.certdir[0], sn, "csr")
-    cert_path = get_crypto_name(args.certdir[0], sn, "pem")
-    key_path = get_crypto_name(args.certdir[0], sn, "key")
-    ca_path = args.ca_certs[0]
+    csr_path = get_crypto_name(args.certdir, sn, "csr")
+    cert_path = get_crypto_name(args.certdir, sn, "pem")
+    key_path = get_crypto_name(args.certdir, sn, "key")
+    ca_path = args.capath
 
     if args.regen_key:
         clear_cert_dir(key_path, csr_path, cert_path)
