@@ -49,7 +49,7 @@ def get_arg_parser():
     """
     parser = argparse.ArgumentParser(description="Certgen - client for retrieving Turris:Sentinel certificates")
     parser.add_argument("--certdir",
-                        required=True,
+                        default="/etc/sentinel",
                         help="path to Sentinel certificate location")
     parser.add_argument("-H", "--cert-api-hostname",
                         default="sentinel.turris.cz",
@@ -87,10 +87,6 @@ def key_match(obj, key):
 
 class CertgenError(Exception):
     pass
-
-
-def get_crypto_name(cert_dir, sn, ext):
-    return os.path.join(cert_dir, str.join(".", (str(sn), ext)))
 
 
 def load_or_remove_key(key_path):
@@ -480,9 +476,12 @@ def main():
         return
     api_url = "{}:{}".format(args.cert_api_hostname, args.cert_api_port)
 
-    csr_path = get_crypto_name(args.certdir, sn, "csr")
-    cert_path = get_crypto_name(args.certdir, sn, "pem")
-    key_path = get_crypto_name(args.certdir, sn, "key")
+    if not os.path.exists(args.certdir):
+        os.makedirs(args.certdir)
+
+    csr_path = os.path.join(args.certdir, "mqtt_csr.pem")
+    cert_path = os.path.join(args.certdir, "mqtt_cert.pem")
+    key_path = os.path.join(args.certdir, "mqtt_key.pem")
     ca_path = args.capath
 
     if args.regen_key:
