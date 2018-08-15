@@ -297,7 +297,6 @@ def process_init(key_path, csr_path, cert_path, sn, flags):
     if os.path.exists(cert_path):
         cert = load_or_remove_cert(cert_path, key)
     if not cert:
-        remove_flag_renew(flags)
         cert_sn = 0
     else:
         if "renew" not in flags:
