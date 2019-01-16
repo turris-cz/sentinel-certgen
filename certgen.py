@@ -47,27 +47,38 @@ logger.addHandler(logging.NullHandler())
 def get_arg_parser():
     """ Returns argument parser object.
     """
-    parser = argparse.ArgumentParser(description="Certgen - client for retrieving Turris:Sentinel certificates")
-    parser.add_argument("--certdir",
-                        default="/etc/sentinel",
-                        help="path to Sentinel certificate location")
-    parser.add_argument("-H", "--cert-api-hostname",
-                        default="sentinel.turris.cz",
-                        help="Certgen api hostname")
-    parser.add_argument("-p", "--cert-api-port",
-                        default="443",
-                        help="Certgen api port")
-    parser.add_argument("-a", "--capath",
-                        help="File with CA certificates for TLS connection")
-    parser.add_argument("-v", "--verbose",
-                        action="store_true",
-                        help="Raise console logging level to debug.")
-    parser.add_argument("-n", "--renew",
-                        action="store_true",
-                        help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key")
-    parser.add_argument("--regen-key",
-                        action="store_true",
-                        help="remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate")
+    def add_common_args(parser):
+        parser.add_argument("-H", "--cert-api-hostname",
+                            default="sentinel.turris.cz",
+                            help="Certgen api hostname")
+        parser.add_argument("-p", "--cert-api-port",
+                            default="443",
+                            help="Certgen api port")
+        parser.add_argument("-a", "--capath",
+                            help="File with CA certificates for TLS connection")
+        parser.add_argument("-v", "--verbose",
+                            action="store_true",
+                            help="Raise console logging level to debug.")
+
+    parser = argparse.ArgumentParser(description="Certgen - client for retrieving"
+                                     " secrets and certs via Turris:Sentinel")
+    subparsers = parser.add_subparsers()
+    subparsers.required = True
+    subparsers.dest = "command"
+
+    # CERTS
+    sub = subparsers.add_parser("certs", help="Retrieve Turris:Sentinel certificates")
+    add_common_args(sub)
+    sub.add_argument("--certdir",
+                     default="/etc/sentinel",
+                     help="path to Sentinel certificate location")
+    sub.add_argument("--regen-key",
+                     action="store_true",
+                     help="remove private key, generate a new one and ask Sentinel:Cert-Api for a new certificate")
+    sub.add_argument("-n", "--renew",
+                     action="store_true",
+                     help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key")
+
     return parser
 
 
@@ -475,24 +486,25 @@ def main():
         return
     api_url = "{}:{}".format(args.cert_api_hostname, args.cert_api_port)
 
-    if not os.path.exists(args.certdir):
-        os.makedirs(args.certdir)
+    if args.command == "certs":
+        if not os.path.exists(args.certdir):
+            os.makedirs(args.certdir)
 
-    csr_path = os.path.join(args.certdir, "mqtt_csr.pem")
-    cert_path = os.path.join(args.certdir, "mqtt_cert.pem")
-    key_path = os.path.join(args.certdir, "mqtt_key.pem")
-    ca_path = args.capath
+        csr_path = os.path.join(args.certdir, "mqtt_csr.pem")
+        cert_path = os.path.join(args.certdir, "mqtt_cert.pem")
+        key_path = os.path.join(args.certdir, "mqtt_key.pem")
+        ca_path = args.capath
 
-    if args.regen_key:
-        clear_cert_dir(key_path, csr_path, cert_path)
+        if args.regen_key:
+            clear_cert_dir(key_path, csr_path, cert_path)
 
-    flags = set()
-    if not args.regen_key and args.renew:
-        if os.path.exists(csr_path):
-            os.remove(csr_path)
-        flags.add("renew")
+        flags = set()
+        if not args.regen_key and args.renew:
+            if os.path.exists(csr_path):
+                os.remove(csr_path)
+            flags.add("renew")
 
-    start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags)
+        start_state_machine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags)
 
 
 if __name__ == "__main__":
