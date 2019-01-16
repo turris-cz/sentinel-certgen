@@ -160,10 +160,18 @@ def extract_cert(cert_str, key):
         return None
 
 
-def cert_expired(cert):
+def cert_expired(cert, csr_path, cert_path):
     due_date = time.mktime(cert.not_valid_after.timetuple())
     now = time.time()
-    return due_date < now
+    if due_date < now:
+        logger.info("Certificate expired. Removing...")
+        if os.path.exists(csr_path):
+            os.remove(csr_path)
+        if os.path.exists(cert_path):
+            os.remove(cert_path)
+        return True
+    else:
+        return False
 
 
 def cert_to_expire(cert):
@@ -368,15 +376,6 @@ class StateMachine:
             logger.error("Auth: Unknown status {}".format(recv_json.get("status")))
             return "INIT"
 
-    def process_valid(self):
-        """ Processing the VALID state. In this state the application checks the
-             validity of the stored files. This state may continue with two
-            statuses:
-            VALID: the files are valid
-            INIT:  the files are fully or almost invalid - should be renewed
-        """
-        raise NotImplementedError("process_valid")
-
     def action_spec_init(self):
         """ Execute an action-specific processes at the beginning of the INIT
         state and return an appropriate next state name.
@@ -398,7 +397,7 @@ class StateMachine:
         state = "INIT"
 
         while True:
-            if state == "INIT":  # look for file with consistent cert or secret
+            if state == "INIT":  # look for file with consistent and fully valid cert or secret
                 logger.debug("---> INIT state")
                 state = self.process_init()
 
@@ -410,11 +409,9 @@ class StateMachine:
                 logger.debug("---> AUTH state")
                 state = self.process_auth()
 
-            elif state == "VALID":  # Check certificate expiration or validity of secret
+            elif state == "VALID":  # final state
                 logger.debug("---> VALID state")
-                state = self.process_valid()
-                if state == "VALID":  # if the VALID state stays valid, exit the app
-                    return
+                return
 
             else:
                 logger.critical("Unknown next state %s", state)
@@ -441,7 +438,8 @@ class CertMachine(StateMachine):
         prepared.
         Depending on the status of certificate file this state continues with status:
             GET:   when no consistent cert is present
-            VALID: when the cert is present and consistent
+            VALID: when the cert is present, consistent, valid and will not
+                   expire nearly
         """
         self.key = None
         if os.path.exists(self.key_path):
@@ -455,17 +453,24 @@ class CertMachine(StateMachine):
             logger.critical("Unable to acquire private key!")
             raise CertgenError("Unable to acquire private key!")
 
-        self.cert = None
+        cert = None
         if os.path.exists(self.cert_path):
-            self.cert = load_or_remove_cert(self.cert_path, self.key)
-        if not self.cert:
+            cert = load_or_remove_cert(self.cert_path, self.key)
+        if not cert:
             self.cert_sn = 0
-        else:
-            if "renew" not in self.flags:
+        else:  # we have a cert
+            if cert_expired(cert, self.csr_path, self.cert_path):
                 self.cert_sn = 0
-                return "VALID"
             else:
-                self.cert_sn = self.cert.serial_number
+                if cert_to_expire(cert):
+                    self.flags.add("renew")
+                    self.cert_sn = cert.serial_number
+                    logger.info("Certificate to expire. Renew flagged.")
+                else:
+                    if "renew" in self.flags:
+                        self.cert_sn = cert.serial_number
+                    else:
+                        return "VALID"
 
         logger.info("Certificate file does not exist or is to be renewed. Re-certifying.")
 
@@ -504,31 +509,6 @@ class CertMachine(StateMachine):
         else:
             logger.error("Obtained cert key does not match.")
             return "INIT"
-
-    def process_valid(self):
-        """ Processing the VALID state. In this state the application checks the
-            expiracy of the certificate. This state may continue with two
-            statuses:
-            VALID: the certificate did not expired and is not going to expire in
-                   within a defined time
-            INIT:  the certificate fully or nearly expired, it will be removed
-                   or/and replaced by a new one.
-        """
-        if cert_expired(self.cert):
-            logger.info("Certificate expired. Removing...")
-            if os.path.exists(self.csr_path):
-                os.remove(self.csr_path)
-            if os.path.exists(self.cert_path):
-                os.remove(self.cert_path)
-            return "INIT"
-
-        if cert_to_expire(self.cert):
-            self.flags.add("renew")
-            logger.info("Certificate to expire. Renew flagged.")
-            return "INIT"
-
-        else:
-            return "VALID"
 
 
 def main():
