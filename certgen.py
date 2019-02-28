@@ -272,7 +272,7 @@ class StateMachine:
         """ Send http request in the GET state.
         """
         req = {
-            "type": "get_cert",
+            "type": "get",
             "auth_type": "atsha204",
             "sn": self.sn,
             "sid": self.sid,
