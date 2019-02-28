@@ -60,6 +60,10 @@ def get_arg_parser():
         parser.add_argument("-v", "--verbose",
                             action="store_true",
                             help="Raise console logging level to debug.")
+        parser.add_argument("--insecure-connection",
+                            action="store_true",
+                            help="Use HTTP instead of HTTPS"
+                                 " when communicating with the server API")
 
     parser = argparse.ArgumentParser(description="Certgen - client for retrieving"
                                      " secrets and certs via Turris:Sentinel")
@@ -241,18 +245,21 @@ def get_digest(nonce):
 
 
 class StateMachine:
-    def __init__(self, ca_path, sn, api_url, flags):
+    def __init__(self, ca_path, sn, api_url, flags, insecure_conn):
         self.ca_path = ca_path
         self.sn = sn
         self.api_url = api_url
         self.flags = flags
+        self.use_tls = not insecure_conn
         self.start()
 
     def send_request(self, req_json):
         """ Send http POST request.
         """
         # Creating GET request to obtain
-        req = urllib.request.Request("https://{}/{}/{}".format(self.api_url, API_VERSION, self.ROUTE))
+        req = urllib.request.Request("{}://{}/{}/{}".format(
+                "https" if self.use_tls else "http",
+                self.api_url, API_VERSION, self.ROUTE))
         req.add_header("Accept", "application/json")
         req.add_header("Content-Type", "application/json")
         data = json.dumps(req_json).encode("utf8")
@@ -264,7 +271,8 @@ class StateMachine:
             ctx.load_verify_locations(self.ca_path)
         else:
             ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-        resp = urllib.request.urlopen(req, data, context=ctx)
+        resp = urllib.request.urlopen(req, data,
+                                      context=ctx if self.use_tls else None)
         resp_json = resp.read()
         return resp_json
 
@@ -428,11 +436,11 @@ class StateMachine:
 class CertMachine(StateMachine):
     ROUTE = "certs"
 
-    def __init__(self, key_path, csr_path, cert_path, ca_path, sn, api_url, flags):
+    def __init__(self, key_path, csr_path, cert_path, ca_path, sn, api_url, flags, ic):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
-        super().__init__(ca_path, sn, api_url, flags)
+        super().__init__(ca_path, sn, api_url, flags, ic)
 
     def action_spec_params(self):
         """ Return certs action-specific parameters for get request
@@ -527,9 +535,9 @@ def secret_ok(secret):
 class MailpassMachine(StateMachine):
     ROUTE = "mailpass"
 
-    def __init__(self, filename, ca_path, sn, api_url, flags):
+    def __init__(self, filename, ca_path, sn, api_url, flags, ic):
         self.filename = filename
-        super().__init__(ca_path, sn, api_url, flags)
+        super().__init__(ca_path, sn, api_url, flags, ic)
 
     def action_spec_init(self):
         """ Checks secret file existence and consistency of its content.
@@ -623,11 +631,13 @@ def main():
                 os.remove(csr_path)
             flags.add("renew")
 
-        CertMachine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags)
+        CertMachine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags,
+                    args.insecure_connection)
 
     elif args.command == "mailpass":
         flags = set()
-        MailpassMachine(args.filename, ca_path, sn, api_url, flags)
+        MailpassMachine(args.filename, ca_path, sn, api_url, flags,
+                        args.insecure_connection)
 
 
 if __name__ == "__main__":
