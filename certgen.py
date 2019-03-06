@@ -218,27 +218,6 @@ def save_cert(cert, cert_path):
         f.write(cert.public_bytes(encoding=serialization.Encoding.PEM))
 
 
-def send_request(ca_path, url, req_json):
-    """ Send http POST request.
-    """
-    # Creating GET request to obtain
-    req = urllib.request.Request("https://{}/{}".format(url, API_VERSION))
-    req.add_header("Accept", "application/json")
-    req.add_header("Content-Type", "application/json")
-    data = json.dumps(req_json).encode("utf8")
-
-    # create ssl context
-    ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ctx.verify_mode = ssl.CERT_REQUIRED
-    if ca_path:
-        ctx.load_verify_locations(ca_path)
-    else:
-        ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-    resp = urllib.request.urlopen(req, data, context=ctx)
-    resp_json = resp.read()
-    return resp_json
-
-
 def get_digest(nonce):
     """ Returns atsha-based digest based on nonce.
     """
@@ -261,6 +240,26 @@ class StateMachine:
         self.flags = flags
         self.start()
 
+    def send_request(self, req_json):
+        """ Send http POST request.
+        """
+        # Creating GET request to obtain
+        req = urllib.request.Request("https://{}/{}/{}".format(self.api_url, API_VERSION, self.ROUTE))
+        req.add_header("Accept", "application/json")
+        req.add_header("Content-Type", "application/json")
+        data = json.dumps(req_json).encode("utf8")
+
+        # create ssl context
+        ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        if self.ca_path:
+            ctx.load_verify_locations(self.ca_path)
+        else:
+            ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+        resp = urllib.request.urlopen(req, data, context=ctx)
+        resp_json = resp.read()
+        return resp_json
+
     def send_get(self):
         """ Send http request in the GET state.
         """
@@ -272,7 +271,7 @@ class StateMachine:
             "flags": list(self.flags),
         }
         req.update(self.action_spec_params())
-        recv = send_request(self.ca_path, self.api_url, req)
+        recv = self.send_request(req)
         return json.loads(recv.decode("utf-8"))
 
     def send_auth(self, digest):
@@ -285,7 +284,7 @@ class StateMachine:
             "sid": self.sid,
             "digest": digest,
         }
-        recv = send_request(self.ca_path, self.api_url, req)
+        recv = self.send_request(req)
         return json.loads(recv.decode("utf-8"))
 
     def remove_flag_renew(self):
@@ -419,6 +418,8 @@ class StateMachine:
 
 
 class CertMachine(StateMachine):
+    ROUTE = "certs"
+
     def __init__(self, key_path, csr_path, cert_path, ca_path, sn, api_url, flags):
         self.key_path = key_path
         self.csr_path = csr_path
@@ -540,6 +541,7 @@ def main():
         logging.critical("ATSHA204 failed: sn")
         return
     api_url = "{}:{}".format(args.cert_api_hostname, args.cert_api_port)
+    ca_path = args.capath
 
     if args.command == "certs":
         if not os.path.exists(args.certdir):
@@ -548,7 +550,6 @@ def main():
         csr_path = os.path.join(args.certdir, "mqtt_csr.pem")
         cert_path = os.path.join(args.certdir, "mqtt_cert.pem")
         key_path = os.path.join(args.certdir, "mqtt_key.pem")
-        ca_path = args.capath
 
         if args.regen_key:
             clear_cert_dir(key_path, csr_path, cert_path)
