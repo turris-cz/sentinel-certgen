@@ -244,6 +244,17 @@ def get_digest(nonce):
     return digest
 
 
+def get_sn():
+    """ Returns atsha-based serial number.
+    """
+    process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
+    if process.wait() == 0:
+        sn = process.stdout.read()[:-1].decode("utf-8")
+        return sn
+    else:
+        raise CertgenError("ATSHA204 failed: sn")
+
+
 class StateMachine:
     def __init__(self, ca_path, sn, api_url, flags, insecure_conn):
         self.ca_path = ca_path
@@ -605,12 +616,12 @@ def main():
         logger.setLevel(logging.DEBUG)
         console_handler.setLevel(logging.DEBUG)
 
-    process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
-    if process.wait() == 0:
-        sn = process.stdout.read()[:-1].decode("utf-8")
-    else:
-        logging.critical("ATSHA204 failed: sn")
+    try:
+        sn = get_sn()
+    except CertgenError as e:
+        logging.critical(str(e))
         return
+
     api_url = "{}:{}".format(args.cert_api_hostname, args.cert_api_port)
     ca_path = args.capath
 
