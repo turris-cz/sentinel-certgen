@@ -38,6 +38,7 @@ MAX_TIME_TO_EXPIRE = 30*24*60*60
 ERROR_WAIT = 5*60
 API_VERSION = "v1"
 RENEW_WAIT = 10
+MIN_MAILPASS_CHARS = 8
 
 logger = logging.getLogger("certgen")
 logger.setLevel(logging.INFO)
@@ -78,6 +79,13 @@ def get_arg_parser():
     sub.add_argument("-n", "--renew",
                      action="store_true",
                      help="ask Sentinel:Cert-Api for a new certificate and reuse the existing key")
+
+    # MAILPASS
+    sub = subparsers.add_parser("mailpass", help="Retrieve secret for notifications mail server")
+    add_common_args(sub)
+    sub.add_argument("-f", "--filename",
+                     default="/etc/sentinel/mailpass",
+                     help="path to file where the secret is stored")
 
     return parser
 
@@ -512,6 +520,61 @@ class CertMachine(StateMachine):
             return "INIT"
 
 
+def secret_ok(secret):
+    return (len(secret) >= MIN_MAILPASS_CHARS)
+
+
+class MailpassMachine(StateMachine):
+    ROUTE = "mailpass"
+
+    def __init__(self, filename, ca_path, sn, api_url, flags):
+        self.filename = filename
+        super().__init__(ca_path, sn, api_url, flags)
+
+    def action_spec_init(self):
+        """ Checks secret file existence and consistency of its content.
+            Returns with "GET" when something fails and with "VALID" otherwise.
+        """
+        if not os.path.exists(self.filename):
+            return "GET"
+
+        try:
+            with open(self.filename, "r") as f:
+                secret = f.readline()
+                if secret_ok(secret):
+                    return "VALID"
+            logger.info("Secret is not valid. Removing...")
+        except (ValueError, AssertionError):
+            logger.info("Secret is inconsistent. Removing...")
+        except PermissionError:
+            logger.critical("Can't read from the selected file '{}' - "
+                            "permission denied".format(self.filename))
+            exit()
+        try:
+            os.remove(self.filename)
+        except PermissionError:
+            logger.critical("Can't remove the selected file '{}' - "
+                            "permission denied".format(self.filename))
+            exit()
+        return "GET"
+
+    def process_get_response(self, response):
+        """ Process data acquired from last get request and return the desired
+            next state
+        """
+        if secret_ok(response.get("secret")):
+            try:
+                with open(self.filename, "w") as f:
+                    f.write(response.get("secret"))
+            except PermissionError:
+                logger.critical("Can't write to the selected file '{}' - "
+                                "permission denied".format(self.filename))
+                exit()
+            return "INIT"
+        logger.debug("Obtained secret is invalid")
+        return "INIT"
+
+
 def main():
     parser = get_arg_parser()
     args = parser.parse_args()
@@ -561,6 +624,10 @@ def main():
             flags.add("renew")
 
         CertMachine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags)
+
+    elif args.command == "mailpass":
+        flags = set()
+        MailpassMachine(args.filename, ca_path, sn, api_url, flags)
 
 
 if __name__ == "__main__":
