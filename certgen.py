@@ -228,12 +228,12 @@ def save_cert(cert, cert_path):
 
 
 def get_digest(nonce):
-    """ Returns atsha-based digest based on nonce.
+    """ Return crypto-wrapper-based digest based on nonce.
     """
-    process = subprocess.Popen(["atsha204cmd", "challenge-response"],
+    process = subprocess.Popen(["crypto-wrapper", "sign"],
                                stdout=subprocess.PIPE,
                                stdin=subprocess.PIPE)
-    nonce = "{}\n".format(nonce).encode("utf-8")
+    nonce = nonce.encode("utf-8")
     # the return value is a list
     digest = process.communicate(input=nonce)[0]
     digest = digest.decode("utf-8").rstrip("\n")
@@ -242,14 +242,14 @@ def get_digest(nonce):
 
 
 def get_sn():
-    """ Returns atsha-based serial number.
+    """ Return crypto-wrapper-based serial number.
     """
-    process = subprocess.Popen(["atsha204cmd", "serial-number"], stdout=subprocess.PIPE)
+    process = subprocess.Popen(["crypto-wrapper", "serial-number"], stdout=subprocess.PIPE)
     if process.wait() == 0:
         sn = process.stdout.read()[:-1].decode("utf-8")
         return sn
     else:
-        raise CertgenError("ATSHA204 failed: sn")
+        raise CertgenError("crypto-wrapper failed: sn")
 
 
 class StateMachine:
@@ -389,7 +389,13 @@ class StateMachine:
             INIT: there was an error in the authentication process
         """
         # we do not save digest to a member variable because we won't use it anymore
-        digest = get_digest(self.nonce)
+        try:
+            digest = get_digest(self.nonce)
+        except CertgenError as e:
+            logger.error("{}. Sleeping for {} seconds before restart.".format(e, ERROR_WAIT))
+            time.sleep(ERROR_WAIT)
+            return "INIT"
+
         recv_json = self.send_auth(digest)
 
         if recv_json.get("status") == "accepted":
