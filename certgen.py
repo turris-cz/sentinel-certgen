@@ -252,12 +252,26 @@ def get_sn():
         raise CertgenError("crypto-wrapper failed: sn")
 
 
+def get_auth_type():
+    """ Return crypto-wrapper-based authentication type.
+    """
+    process = subprocess.Popen(["crypto-wrapper", "hw-type"], stdout=subprocess.PIPE)
+    if process.wait() == 0:
+        auth_type = process.stdout.read()[:-1].decode("utf-8")
+        if auth_type == "atsha":
+            return "atsha204"
+        return auth_type
+    else:
+        raise CertgenError("crypto-wrapper failed: hw-type")
+
+
 class StateMachine:
-    def __init__(self, ca_path, sn, api_url, flags, insecure_conn):
+    def __init__(self, ca_path, sn, api_url, flags, auth_type, insecure_conn):
         self.ca_path = ca_path
         self.sn = sn
         self.api_url = api_url
         self.flags = flags
+        self.auth_type = auth_type
         self.use_tls = not insecure_conn
         self.start()
 
@@ -292,7 +306,7 @@ class StateMachine:
         """
         req = {
             "type": "get",
-            "auth_type": "atsha204",
+            "auth_type": self.auth_type,
             "sn": self.sn,
             "sid": self.sid,
             "flags": list(self.flags),
@@ -305,7 +319,7 @@ class StateMachine:
         """
         req = {
             "type": "auth",
-            "auth_type": "atsha204",
+            "auth_type": self.auth_type,
             "sn": self.sn,
             "sid": self.sid,
             "digest": digest,
@@ -467,11 +481,12 @@ class StateMachine:
 
 
 class CertMachine(StateMachine):
-    def __init__(self, key_path, csr_path, cert_path, ca_path, sn, api_url, flags, ic):
+    def __init__(self, key_path, csr_path, cert_path, ca_path, sn, api_url, flags,
+                 auth_type, ic):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
-        super().__init__(ca_path, sn, api_url, flags, ic)
+        super().__init__(ca_path, sn, api_url, flags, auth_type, ic)
 
     @property
     def ROUTE(self):
@@ -575,10 +590,9 @@ def secret_ok(secret):
 
 
 class MailpassMachine(StateMachine):
-
-    def __init__(self, filename, ca_path, sn, api_url, flags, ic):
+    def __init__(self, filename, ca_path, sn, api_url, flags, auth_type, ic):
         self.filename = filename
-        super().__init__(ca_path, sn, api_url, flags, ic)
+        super().__init__(ca_path, sn, api_url, flags, auth_type, ic)
 
     @property
     def ROUTE(self):
@@ -658,6 +672,7 @@ def main():
 
     try:
         sn = get_sn()
+        auth_type = get_auth_type()
     except CertgenError as e:
         logging.critical(str(e))
         return
@@ -683,12 +698,12 @@ def main():
             flags.add("renew")
 
         CertMachine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags,
-                    args.insecure_connection)
+                    auth_type, args.insecure_connection)
 
     elif args.command == "mailpass":
         flags = set()
         MailpassMachine(args.filename, ca_path, sn, api_url, flags,
-                        args.insecure_connection)
+                        auth_type, args.insecure_connection)
 
 
 if __name__ == "__main__":
