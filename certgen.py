@@ -194,7 +194,7 @@ def cert_to_expire(cert):
 
 def clear_cert_dir(key_path, csr_path, cert_path):
     """ Remove (if exist) private and public keys and certificate
-    sifning request from Sentinel certificate directory.
+    signing request from Sentinel certificate directory.
     """
     if os.path.exists(key_path):
         os.remove(key_path)
@@ -319,11 +319,11 @@ class StateMachine:
             self.flags.remove("renew")
 
     def process_init(self):
-        """ Processing the initial state. In this state, private key and certicate
-        or any other possible files
-        are loaded and checked. If something in the process fails the currupted,
-        unconsistent or invalid files may be deleted.
-        Depending on the overall result this state may continue with statuses:
+        """ Processing the initial state. In this state, private key and
+        certificate or any other possible files are loaded and checked.
+        If something in the process fails the corrupted, inconsistent or invalid
+        files may be deleted. Depending on the overall result this state may
+        continue with states:
             GET:   when no consistent data are present or some data are missing
             VALID: when all the data are present and consistent
         """
@@ -334,10 +334,10 @@ class StateMachine:
     def process_get(self):
         """ Processing the GET state. In this state the application tries to
         download and save new data from Cert-api server. This state may
-        continue with three statuses:
+        continue with three states:
             INIT: * when a valid data are downloaded and saved (init must check
                     consistency and validity once more)
-                  * the received data are not valid or some other error occured
+                  * the received data are not valid or some other error occurred
             AUTH: when there is no valid data available without authentication
             GET:  the certification process is still running, we have to wait
         """
@@ -373,12 +373,12 @@ class StateMachine:
 
     def process_auth(self):
         """ Processing the AUTH state. In this state the application authenticates to
-        the Cert-api server. This state may continue with two statuses:
-            GET:  authectication was succesfull, we can continue to download the
+        the Cert-api server. This state may continue with two states:
+            GET:  authentication was successful, we can continue to download the
                   new data
             INIT: there was an error in the authentication process
         """
-        #  we do not save digest to a member variable because we wont use it anymore
+        # we do not save digest to a member variable because we won't use it anymore
         digest = get_digest(self.nonce)
         recv_json = self.send_auth(digest)
 
@@ -431,7 +431,7 @@ class StateMachine:
                 logger.debug("---> GET state")
                 state = self.process_get()
 
-            elif state == "AUTH":  # if we can't use cache, we need to auth
+            elif state == "AUTH":  # if the API requires authentication
                 logger.debug("---> AUTH state")
                 state = self.process_auth()
 
@@ -520,14 +520,15 @@ class CertMachine(StateMachine):
             This function may return on of the three next states:
             INIT: * when a valid certificate is downloaded and saved (init must
                     check consistency of the certificate file)
-                  * the received certificate is not valid or some other error occured
+                  * the received certificate is not valid or some other error
+                    occurred
             GET:  the certs sn does not match - old cert still in cache, we have
                   to wait
         """
         cert = extract_cert(response["cert"], self.key)  # extract & consistency check
         if cert:
             if cert.serial_number != self.cert_sn:
-                logger.info("New certificate succesfully downloaded.")
+                logger.info("New certificate successfully downloaded.")
                 save_cert(cert, self.cert_path)
                 return "INIT"
             else:
