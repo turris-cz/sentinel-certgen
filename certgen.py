@@ -51,19 +51,19 @@ def get_arg_parser():
     def add_common_args(parser):
         parser.add_argument("-H", "--cert-api-hostname",
                             default="sentinel.turris.cz",
-                            help="Certgen api hostname")
+                            help="cert-api hostname")
         parser.add_argument("-p", "--cert-api-port",
                             default="443",
-                            help="Certgen api port")
+                            help="cert-api port")
         parser.add_argument("-a", "--capath",
-                            help="File with CA certificates for TLS connection")
+                            help="file with CA certificates for TLS connection")
         parser.add_argument("-v", "--verbose",
                             action="store_true",
-                            help="Raise console logging level to debug.")
+                            help="raise console logging level to debug")
         parser.add_argument("--insecure-connection",
                             action="store_true",
-                            help="Use HTTP instead of HTTPS"
-                                 " when communicating with the server API")
+                            help="use HTTP instead of HTTPS"
+                                 " when communicating with the API server")
 
     parser = argparse.ArgumentParser(description="Certgen - client for retrieving"
                                      " secrets and certs via Turris:Sentinel")
