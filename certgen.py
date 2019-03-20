@@ -156,7 +156,13 @@ def load_or_remove_csr(csr_path, key):
 
 
 def extract_cert(cert_str, key):
-    cert = x509.load_pem_x509_certificate(cert_str.encode("utf-8"), default_backend())
+    if not cert_str:
+        return None
+    try:
+        cert = x509.load_pem_x509_certificate(cert_str.encode("utf-8"),
+                                              default_backend())
+    except ValueError:
+        return None
     if key_match(cert, key):
         return cert
     else:
@@ -515,7 +521,7 @@ class CertMachine(StateMachine):
             GET:  the certs sn does not match - old cert still in cache, we have
                   to wait
         """
-        cert = extract_cert(response["cert"], self.key)  # extract & consistency check
+        cert = extract_cert(response.get("cert"), self.key)  # extract & consistency check
         if cert:
             if cert.serial_number != self.cert_sn:
                 logger.info("New certificate successfully downloaded.")
