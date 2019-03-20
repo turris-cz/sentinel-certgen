@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import datetime
 import time
 import os
 import subprocess
@@ -163,9 +164,8 @@ def extract_cert(cert_str, key):
 
 
 def cert_expired(cert, csr_path, cert_path):
-    due_date = time.mktime(cert.not_valid_after.timetuple())
-    now = time.time()
-    if due_date < now:
+    now = datetime.datetime.utcnow()
+    if cert.not_valid_after < now:
         logger.info("Certificate expired. Removing...")
         if os.path.exists(csr_path):
             os.remove(csr_path)
@@ -177,9 +177,9 @@ def cert_expired(cert, csr_path, cert_path):
 
 
 def cert_to_expire(cert):
-    due_date = time.mktime(cert.not_valid_after.timetuple())
-    now = time.time()
-    return due_date < (now + MAX_TIME_TO_EXPIRE)
+    now = datetime.datetime.utcnow()
+    max_time_to_expire = datetime.timedelta(seconds=MAX_TIME_TO_EXPIRE)
+    return cert.not_valid_after < (now + max_time_to_expire)
 
 
 def clear_cert_dir(key_path, csr_path, cert_path):
