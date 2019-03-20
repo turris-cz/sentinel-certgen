@@ -585,10 +585,7 @@ class MailpassMachine(StateMachine):
         return "INIT"
 
 
-def main():
-    parser = get_arg_parser()
-    args = parser.parse_args()
-
+def setup_logger(verbose):
     formatter = logging.Formatter("sentinel: %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
                                   "%Y-%m-%d %H:%M:%S")
     time_formatter = logging.Formatter("[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
@@ -603,9 +600,16 @@ def main():
     console_handler.setFormatter(time_formatter)
     logger.addHandler(console_handler)
 
-    if args.verbose:
+    if verbose:
         logger.setLevel(logging.DEBUG)
         console_handler.setLevel(logging.DEBUG)
+
+
+def main():
+    parser = get_arg_parser()
+    args = parser.parse_args()
+
+    setup_logger(args.verbose)
 
     try:
         sn = get_sn()
