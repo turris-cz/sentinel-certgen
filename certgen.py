@@ -95,17 +95,7 @@ def get_arg_parser():
 
 
 def key_match(obj, key):
-    """ Compares two public keys in different formats and returns true if they
-    match.
-    """
-    try:
-        obj_str = obj.public_key().public_bytes(serialization.Encoding.PEM,
-                                                serialization.PublicFormat.SubjectPublicKeyInfo)
-        key_str = key.public_key().public_bytes(serialization.Encoding.PEM,
-                                                serialization.PublicFormat.SubjectPublicKeyInfo)
-        return obj_str == key_str
-    except (ValueError, AssertionError):
-        return False
+    return obj.public_key().public_numbers() == key.public_key().public_numbers()
 
 
 class CertgenError(Exception):
