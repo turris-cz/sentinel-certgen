@@ -228,9 +228,9 @@ def get_digest(nonce):
                                stdin=subprocess.PIPE)
     nonce = "{}\n".format(nonce).encode("utf-8")
     # the return value is a list
-    # remove "\n" at the and
-    digest = process.communicate(input=nonce)[0][:-1]
-    digest = digest.decode("utf-8")
+    digest = process.communicate(input=nonce)[0]
+    digest = digest.decode("utf-8").rstrip("\n")
+
     return digest
 
 
