@@ -295,7 +295,11 @@ class StateMachine:
         }
         req.update(self.action_spec_params())
         recv = self.send_request(req)
-        return json.loads(recv.decode("utf-8"))
+        try:
+            response = json.loads(recv.decode("utf-8"))
+            return response
+        except (json.decoder.JSONDecodeError, AttributeError):
+            return {}
 
     def send_auth(self, digest):
         """ Send http request in the AUTH state.
@@ -308,7 +312,11 @@ class StateMachine:
             "digest": digest,
         }
         recv = self.send_request(req)
-        return json.loads(recv.decode("utf-8"))
+        try:
+            response = json.loads(recv.decode("utf-8"))
+            return response
+        except (json.decoder.JSONDecodeError, AttributeError):
+            return {}
 
     def remove_flag_renew(self):
         if "renew" in self.flags:
@@ -365,6 +373,7 @@ class StateMachine:
 
         else:
             logger.error("Get: Unknown status {}".format(recv_json.get("status")))
+            time.sleep(ERROR_WAIT)
             return "INIT"
 
     def process_auth(self):
@@ -396,6 +405,7 @@ class StateMachine:
 
         else:
             logger.error("Auth: Unknown status {}".format(recv_json.get("status")))
+            time.sleep(ERROR_WAIT)
             return "INIT"
 
     def action_spec_init(self):
