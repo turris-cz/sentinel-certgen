@@ -45,6 +45,10 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.NullHandler())
 
 
+class CertgenError(Exception):
+    pass
+
+
 def get_arg_parser():
     """ Returns argument parser object.
     """
@@ -96,10 +100,6 @@ def get_arg_parser():
 
 def key_match(obj, key):
     return obj.public_key().public_numbers() == key.public_key().public_numbers()
-
-
-class CertgenError(Exception):
-    pass
 
 
 def load_or_remove_key(key_path):
