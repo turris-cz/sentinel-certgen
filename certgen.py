@@ -41,6 +41,12 @@ API_VERSION = "v1"
 RENEW_WAIT = 10
 MIN_MAILPASS_CHARS = 8
 
+# States used in the state machine
+STATE_INIT = "INIT"
+STATE_GET = "GET"
+STATE_AUTH = "AUTH"
+STATE_VALID = "VALID"
+
 logger = logging.getLogger("certgen")
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.NullHandler())
@@ -354,27 +360,27 @@ class StateMachine:
         elif recv_json.get("status") == "wait":
             logger.debug("Sleeping for {} seconds".format(recv_json["delay"]))
             time.sleep(recv_json["delay"])
-            return "GET"
+            return STATE_GET
 
         elif recv_json.get("status") == "error":
             logger.error("Get Error. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_INIT
 
         elif recv_json.get("status") == "fail":
             logger.error("Get Fail. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_INIT
 
         elif recv_json.get("status") == "authenticate":
             self.sid = recv_json["sid"]
             self.nonce = recv_json["nonce"]
-            return "AUTH"
+            return STATE_AUTH
 
         else:
             logger.error("Get: Unknown status {}".format(recv_json.get("status")))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_INIT
 
     def process_auth(self):
         """ Processing the AUTH state. In this state the application authenticates to
@@ -391,22 +397,22 @@ class StateMachine:
             self.remove_flag_renew()
             logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
             time.sleep(recv_json["delay"])
-            return "GET"
+            return STATE_GET
 
         elif recv_json.get("status") == "error":
             logger.error("Auth Error. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_INIT
 
         elif recv_json.get("status") == "fail":
             logger.error("Auth Fail. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_INIT
 
         else:
             logger.error("Auth: Unknown status {}".format(recv_json.get("status")))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_INIT
 
     def action_spec_init(self):
         """ Execute an action-specific processes at the beginning of the INIT
@@ -426,22 +432,22 @@ class StateMachine:
         raise NotImplementedError("process_get_response")
 
     def start(self):
-        state = "INIT"
+        state = STATE_INIT
 
         while True:
-            if state == "INIT":  # look for file with consistent and fully valid cert or secret
+            if state == STATE_INIT:  # look for file with consistent and fully valid cert or secret
                 logger.debug("---> INIT state")
                 state = self.process_init()
 
-            elif state == "GET":  # if there is no cert/secret in file, download & save it form Cert-api
+            elif state == STATE_GET:  # if there is no cert/secret in file, download & save it form Cert-api
                 logger.debug("---> GET state")
                 state = self.process_get()
 
-            elif state == "AUTH":  # if the API requires authentication
+            elif state == STATE_AUTH:  # if the API requires authentication
                 logger.debug("---> AUTH state")
                 state = self.process_auth()
 
-            elif state == "VALID":  # final state
+            elif state == STATE_VALID:  # final state
                 logger.debug("---> VALID state")
                 return
 
@@ -504,7 +510,7 @@ class CertMachine(StateMachine):
                     if "renew" in self.flags:
                         self.cert_sn = cert.serial_number
                     else:
-                        return "VALID"
+                        return STATE_VALID
 
         logger.info("Certificate file does not exist or is to be renewed. Re-certifying.")
 
@@ -515,7 +521,7 @@ class CertMachine(StateMachine):
             generate_csr_file(self.csr_path, self.sn, self.key)
             self.csr = load_or_remove_csr(self.csr_path, self.key)
         if self.csr:
-            return "GET"
+            return STATE_GET
         else:
             logger.critical("Unable to acquire csr!")
             raise CertgenError("Unable to acquire csr!")
@@ -536,14 +542,14 @@ class CertMachine(StateMachine):
             if cert.serial_number != self.cert_sn:
                 logger.info("New certificate successfully downloaded.")
                 save_cert(cert, self.cert_path)
-                return "INIT"
+                return STATE_INIT
             else:
                 logger.debug("New cert not yet available.  Sleeping for {} seconds".format(RENEW_WAIT))
                 time.sleep(RENEW_WAIT)
-                return "GET"
+                return STATE_GET
         else:
             logger.error("Obtained cert key does not match.")
-            return "INIT"
+            return STATE_INIT
 
 
 def secret_ok(secret):
@@ -559,16 +565,16 @@ class MailpassMachine(StateMachine):
 
     def action_spec_init(self):
         """ Checks secret file existence and consistency of its content.
-            Returns with "GET" when something fails and with "VALID" otherwise.
+            Returns with STATE_GET when something fails and with STATE_VALID otherwise.
         """
         if not os.path.exists(self.filename):
-            return "GET"
+            return STATE_GET
 
         try:
             with open(self.filename, "r") as f:
                 secret = f.readline()
                 if secret_ok(secret):
-                    return "VALID"
+                    return STATE_VALID
             logger.info("Secret is not valid. Removing...")
         except (ValueError, AssertionError):
             logger.info("Secret is inconsistent. Removing...")
@@ -582,7 +588,7 @@ class MailpassMachine(StateMachine):
             logger.critical("Can't remove the selected file '{}' - "
                             "permission denied".format(self.filename))
             exit()
-        return "GET"
+        return STATE_GET
 
     def process_get_response(self, response):
         """ Process data acquired from last get request and return the desired
@@ -596,9 +602,9 @@ class MailpassMachine(StateMachine):
                 logger.critical("Can't write to the selected file '{}' - "
                                 "permission denied".format(self.filename))
                 exit()
-            return "INIT"
+            return STATE_INIT
         logger.debug("Obtained secret is invalid")
-        return "INIT"
+        return STATE_INIT
 
 
 def setup_logger(verbose):
