@@ -261,6 +261,12 @@ class StateMachine:
         self.use_tls = not insecure_conn
         self.start()
 
+    @property
+    def ROUTE(self):
+        """ Get cert-api action route
+        """
+        raise NotImplementedError("ROUTE")
+
     def send_request(self, req_json):
         """ Send http POST request.
         """
@@ -452,13 +458,17 @@ class StateMachine:
 
 
 class CertMachine(StateMachine):
-    ROUTE = "certs"
-
     def __init__(self, key_path, csr_path, cert_path, ca_path, sn, api_url, flags, ic):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
         super().__init__(ca_path, sn, api_url, flags, ic)
+
+    @property
+    def ROUTE(self):
+        """ Get cert-api action route
+        """
+        return "certs"
 
     def action_spec_params(self):
         """ Return certs action-specific parameters for get request
@@ -556,11 +566,16 @@ def secret_ok(secret):
 
 
 class MailpassMachine(StateMachine):
-    ROUTE = "mailpass"
 
     def __init__(self, filename, ca_path, sn, api_url, flags, ic):
         self.filename = filename
         super().__init__(ca_path, sn, api_url, flags, ic)
+
+    @property
+    def ROUTE(self):
+        """ Get cert-api action route
+        """
+        return "mailpass"
 
     def action_spec_init(self):
         """ Checks secret file existence and consistency of its content.
