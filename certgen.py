@@ -178,11 +178,6 @@ def extract_cert(cert_str, key):
 def cert_expired(cert, csr_path, cert_path):
     now = datetime.datetime.utcnow()
     if cert.not_valid_after < now:
-        logger.info("Certificate expired. Removing...")
-        if os.path.exists(csr_path):
-            os.remove(csr_path)
-        if os.path.exists(cert_path):
-            os.remove(cert_path)
         return True
     else:
         return False
@@ -500,6 +495,10 @@ class CertMachine(StateMachine):
             self.cert_sn = 0
         else:  # we have a cert
             if cert_expired(cert, self.csr_path, self.cert_path):
+                logger.info("Certificate expired. Removing...")
+                if os.path.exists(self.csr_path):
+                    os.remove(self.csr_path)
+                os.remove(self.cert_path)
                 self.cert_sn = 0
             else:
                 if cert_to_expire(cert):
