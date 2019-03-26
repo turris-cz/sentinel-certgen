@@ -351,12 +351,16 @@ class StateMachine:
             return STATE_GET
 
         elif recv_json.get("status") == "error":
-            logger.error("Get Error. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
+            logger.error("Get Error. The server responded with the message: '{}'. "
+                         "Sleeping for {} seconds before restart."
+                         .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
             return STATE_INIT
 
         elif recv_json.get("status") == "fail":
-            logger.error("Get Fail. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
+            logger.error("Get Fail. The server responded with the message: '{}'. "
+                         "Sleeping for {} seconds before restart."
+                         .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
             return STATE_INIT
 
@@ -388,12 +392,16 @@ class StateMachine:
             return STATE_GET
 
         elif recv_json.get("status") == "error":
-            logger.error("Auth Error. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
+            logger.error("Auth Error. The server responded with the message: '{}'. "
+                         "Sleeping for {} seconds before restart."
+                         .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
             return STATE_INIT
 
         elif recv_json.get("status") == "fail":
-            logger.error("Auth Fail. Sleeping for {} seconds before restart.".format(ERROR_WAIT))
+            logger.error("Auth Fail. The server responded with the message: '{}'. "
+                         "Sleeping for {} seconds before restart."
+                         .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
             return STATE_INIT
 
