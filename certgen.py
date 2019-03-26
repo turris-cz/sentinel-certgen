@@ -20,18 +20,18 @@ import datetime
 import time
 import os
 import subprocess
-import urllib.request
-import ssl
 import argparse
 import logging
 import logging.handlers
 import json
+
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
+import requests
 
 
 ELLIPTIC_CURVE = ec.SECP256R1()
@@ -270,25 +270,22 @@ class StateMachine:
     def send_request(self, req_json):
         """ Send http POST request.
         """
-        # Creating GET request to obtain
-        req = urllib.request.Request("{}://{}/{}/{}".format(
-                "https" if self.use_tls else "http",
-                self.api_url, API_VERSION, self.ROUTE))
-        req.add_header("Accept", "application/json")
-        req.add_header("Content-Type", "application/json")
+        url = "{}://{}/{}/{}".format("https" if self.use_tls else "http",
+                                     self.api_url, API_VERSION, self.ROUTE)
+        headers = {"Accept": "application/json",
+                   "Content-Type": "application/json"}
         data = json.dumps(req_json).encode("utf8")
 
-        # create ssl context
-        ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        ctx.verify_mode = ssl.CERT_REQUIRED
-        if self.ca_path:
-            ctx.load_verify_locations(self.ca_path)
-        else:
-            ctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-        resp = urllib.request.urlopen(req, data,
-                                      context=ctx if self.use_tls else None)
-        resp_json = resp.read()
-        return resp_json
+        try:
+            req = requests.post(url, headers=headers, data=data,
+                                verify=self.ca_path)
+            return req.json()
+        except (json.decoder.JSONDecodeError, AttributeError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.SSLError) as e:
+            logger.error("Sending request failed with {}".format(e))
+            # TODO Handle properly using exception propagation
+            return {}
 
     def send_get(self):
         """ Send http request in the GET state.
@@ -301,12 +298,7 @@ class StateMachine:
             "flags": list(self.flags),
         }
         req.update(self.action_spec_params())
-        recv = self.send_request(req)
-        try:
-            response = json.loads(recv.decode("utf-8"))
-            return response
-        except (json.decoder.JSONDecodeError, AttributeError):
-            return {}
+        return self.send_request(req)
 
     def send_auth(self, digest):
         """ Send http request in the AUTH state.
@@ -318,12 +310,7 @@ class StateMachine:
             "sid": self.sid,
             "digest": digest,
         }
-        recv = self.send_request(req)
-        try:
-            response = json.loads(recv.decode("utf-8"))
-            return response
-        except (json.decoder.JSONDecodeError, AttributeError):
-            return {}
+        return self.send_request(req)
 
     def remove_flag_renew(self):
         if "renew" in self.flags:
