@@ -497,14 +497,14 @@ class CertMachine(StateMachine):
         if os.path.exists(self.cert_path):
             cert = load_or_remove_cert(self.cert_path, self.key)
         if not cert:
-            self.cert_sn = 0
+            self.cert_sn = None
         else:  # we have a cert
             if cert_expired(cert, self.csr_path, self.cert_path):
                 logger.info("Certificate expired. Removing...")
                 if os.path.exists(self.csr_path):
                     os.remove(self.csr_path)
                 os.remove(self.cert_path)
-                self.cert_sn = 0
+                self.cert_sn = None
             else:
                 if cert_to_expire(cert):
                     self.flags.add("renew")
