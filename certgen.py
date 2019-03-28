@@ -40,6 +40,8 @@ ERROR_WAIT = 5*60
 API_VERSION = "v1"
 RENEW_WAIT = 10
 MIN_MAILPASS_CHARS = 8
+INIT_NONCE = None
+INIT_SID = ""
 
 # States used in the state machine
 STATE_INIT = "INIT"
@@ -325,7 +327,7 @@ class StateMachine:
             GET:   when no consistent data are present or some data are missing
             VALID: when all the data are present and consistent
         """
-        self.sid = ""
+        self.sid = INIT_SID
         # This section is handled by action-specific functions
         return self.action_spec_init()
 
@@ -340,14 +342,14 @@ class StateMachine:
             GET:  the certification process is still running, we have to wait
         """
         recv_json = self.send_get()
-        self.nonce = None
+        self.nonce = INIT_NONCE
 
         if recv_json.get("status") == "ok":
             return self.process_get_response(recv_json)
 
         elif recv_json.get("status") == "wait":
-            logger.debug("Sleeping for {} seconds".format(recv_json["delay"]))
-            time.sleep(recv_json["delay"])
+            logger.debug("Sleeping for {} seconds".format(recv_json.get("delay", RENEW_WAIT)))
+            time.sleep(recv_json.get("delay", RENEW_WAIT))
             return STATE_GET
 
         elif recv_json.get("status") == "error":
@@ -365,8 +367,15 @@ class StateMachine:
             return STATE_INIT
 
         elif recv_json.get("status") == "authenticate":
-            self.sid = recv_json["sid"]
-            self.nonce = recv_json["nonce"]
+            self.sid = recv_json.get("sid", INIT_SID)
+            self.nonce = recv_json.get("nonce", INIT_NONCE)
+            if (self.sid == INIT_SID or self.nonce == INIT_NONCE):
+                logger.error("Received 'sid' or 'nonce' invalid or missing. "
+                             "Sleeping for {} seconds before restart."
+                             .format(ERROR_WAIT))
+                time.sleep(ERROR_WAIT)
+                return STATE_INIT
+
             return STATE_AUTH
 
         else:
@@ -387,8 +396,9 @@ class StateMachine:
 
         if recv_json.get("status") == "accepted":
             self.remove_flag_renew()
-            logger.debug("Auth accepted, sleeping for {} sec.".format(recv_json["delay"]))
-            time.sleep(recv_json["delay"])
+            logger.debug("Auth accepted, sleeping for {} sec."
+                         .format(recv_json.get("delay", RENEW_WAIT)))
+            time.sleep(recv_json.get("delay", RENEW_WAIT))
             return STATE_GET
 
         elif recv_json.get("status") == "error":
