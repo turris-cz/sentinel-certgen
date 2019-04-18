@@ -246,8 +246,7 @@ def get_sn():
     """
     process = subprocess.Popen(["crypto-wrapper", "serial-number"], stdout=subprocess.PIPE)
     if process.wait() == 0:
-        sn = process.stdout.read()[:-1].decode("utf-8")
-        return sn
+        return process.stdout.read().decode("utf-8").rstrip("\n")
     else:
         raise CertgenError("crypto-wrapper failed: sn")
 
@@ -257,7 +256,7 @@ def get_auth_type():
     """
     process = subprocess.Popen(["crypto-wrapper", "hw-type"], stdout=subprocess.PIPE)
     if process.wait() == 0:
-        return process.stdout.read()[:-1].decode("utf-8")
+        return process.stdout.read().decode("utf-8").rstrip("\n")
     else:
         raise CertgenError("crypto-wrapper failed: hw-type")
 
