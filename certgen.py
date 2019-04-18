@@ -257,10 +257,7 @@ def get_auth_type():
     """
     process = subprocess.Popen(["crypto-wrapper", "hw-type"], stdout=subprocess.PIPE)
     if process.wait() == 0:
-        auth_type = process.stdout.read()[:-1].decode("utf-8")
-        if auth_type == "atsha":
-            return "atsha204"
-        return auth_type
+        return process.stdout.read()[:-1].decode("utf-8")
     else:
         raise CertgenError("crypto-wrapper failed: hw-type")
 
