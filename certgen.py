@@ -498,7 +498,7 @@ class CertMachine(StateMachine):
         """ Return certs action-specific parameters for get request
         """
         csr_str = self.csr.public_bytes(serialization.Encoding.PEM).decode("utf-8")
-        return {"csr": csr_str}
+        return {"csr_str": csr_str}
 
     def action_spec_init(self):
         """ Processing the initial state. In this state, private key and certificate
