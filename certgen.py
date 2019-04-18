@@ -227,18 +227,18 @@ def save_cert(cert, cert_path):
         f.write(cert.public_bytes(encoding=serialization.Encoding.PEM))
 
 
-def get_digest(nonce):
-    """ Return crypto-wrapper-based digest based on nonce.
+def get_signature(nonce):
+    """ Return crypto-wrapper-based signature of nonce.
     """
     process = subprocess.Popen(["crypto-wrapper", "sign"],
                                stdout=subprocess.PIPE,
                                stdin=subprocess.PIPE)
     nonce = nonce.encode("utf-8")
     # the return value is a list
-    digest = process.communicate(input=nonce)[0]
-    digest = digest.decode("utf-8").rstrip("\n")
+    signature = process.communicate(input=nonce)[0]
+    signature = signature.decode("utf-8").rstrip("\n")
 
-    return digest
+    return signature
 
 
 def get_sn():
@@ -311,7 +311,7 @@ class StateMachine:
         req.update(self.action_spec_params())
         return self.send_request(req)
 
-    def send_auth(self, digest):
+    def send_auth(self, signature):
         """ Send http request in the AUTH state.
         """
         req = {
@@ -319,7 +319,7 @@ class StateMachine:
             "auth_type": self.auth_type,
             "sn": self.sn,
             "sid": self.sid,
-            "digest": digest,
+            "signature": signature,
         }
         return self.send_request(req)
 
@@ -399,15 +399,15 @@ class StateMachine:
                   new data
             INIT: there was an error in the authentication process
         """
-        # we do not save digest to a member variable because we won't use it anymore
+        # we do not save a signature to a member as we won't use it anymore
         try:
-            digest = get_digest(self.nonce)
+            signature = get_signature(self.nonce)
         except CertgenError as e:
             logger.error("{}. Sleeping for {} seconds before restart.".format(e, ERROR_WAIT))
             time.sleep(ERROR_WAIT)
             return "INIT"
 
-        recv_json = self.send_auth(digest)
+        recv_json = self.send_auth(signature)
 
         if recv_json.get("status") == "accepted":
             self.remove_flag_renew()
