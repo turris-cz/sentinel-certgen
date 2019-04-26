@@ -295,9 +295,21 @@ class StateMachine:
         data = json.dumps(req_json).encode("utf8")
 
         try:
-            req = requests.post(url, headers=headers, data=data,
-                                verify=self.ca_path)
-            return req.json()
+            response = requests.post(
+                    url, headers=headers, data=data,
+                    verify=self.ca_path
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(
+                    "Server returned HTTP error: %d %s",
+                    response.status_code,
+                    response.reason
+            )
+            return {}
+
         except (json.decoder.JSONDecodeError, AttributeError,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.SSLError) as e:
