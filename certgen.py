@@ -65,6 +65,10 @@ class CertgenError(Exception):
     pass
 
 
+class CertgenRequestError(CertgenError):
+    pass
+
+
 def get_arg_parser():
     """ Returns argument parser object.
     """
@@ -303,19 +307,17 @@ class StateMachine:
             return response.json()
 
         except requests.exceptions.HTTPError as e:
-            logger.error(
-                    "Server returned HTTP error: %d %s",
-                    response.status_code,
-                    response.reason
+            raise CertgenRequestError(
+                    "Server returned HTTP error: {} {}".format(
+                            response.status_code,
+                            response.reason
+                    )
             )
-            return {}
 
         except (json.decoder.JSONDecodeError, AttributeError,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.SSLError) as e:
-            logger.error("Sending request failed with %s", str(e))
-            # TODO Handle properly using exception propagation
-            return {}
+            raise CertgenRequestError("Sending request failed: {}".format(str(e)))
 
     def send_get(self):
         """ Send http request in the GET state.
@@ -369,8 +371,13 @@ class StateMachine:
             AUTH: when there is no valid data available without authentication
             GET:  the certification process is still running, we have to wait
         """
-        recv_json = self.send_get()
         self.nonce = INIT_NONCE
+
+        try:
+            recv_json = self.send_get()
+        except CertgenRequestError as e:
+            logger.error(str(e))
+            return STATE_FAIL
 
         if recv_json.get("status") == "ok":
             return self.process_get_response(recv_json)
