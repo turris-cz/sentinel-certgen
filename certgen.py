@@ -43,11 +43,14 @@ MIN_MAILPASS_CHARS = 8
 INIT_NONCE = None
 INIT_SID = ""
 
+DEFAULT_MAX_TRIES = 3
+
 # States used in the state machine
 STATE_INIT = "INIT"
 STATE_GET = "GET"
 STATE_AUTH = "AUTH"
 STATE_VALID = "VALID"
+STATE_FAIL = "FAIL"
 
 logger = logging.getLogger("certgen")
 logger.setLevel(logging.INFO)
@@ -269,6 +272,9 @@ class StateMachine:
         self.flags = flags
         self.auth_type = auth_type
         self.use_tls = not insecure_conn
+        self.tries = 0
+        self.max_tries = DEFAULT_MAX_TRIES
+
         self.start()
 
     @property
@@ -343,9 +349,9 @@ class StateMachine:
         """ Processing the GET state. In this state the application tries to
         download and save new data from Cert-api server. This state may
         continue with three states:
-            INIT: * when a valid data are downloaded and saved (init must check
-                    consistency and validity once more)
-                  * the received data are not valid or some other error occurred
+            INIT: when a valid data are downloaded and saved (init must check
+                  consistency and validity once more)
+            FAIL: the received data are not valid or some other error occurred
             AUTH: when there is no valid data available without authentication
             GET:  the certification process is still running, we have to wait
         """
@@ -365,14 +371,14 @@ class StateMachine:
                          "Sleeping for {} seconds before restart."
                          .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return STATE_INIT
+            return STATE_FAIL
 
         elif recv_json.get("status") == "fail":
             logger.error("Get Fail. The server responded with the message: '{}'. "
                          "Sleeping for {} seconds before restart."
                          .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return STATE_INIT
+            return STATE_FAIL
 
         elif recv_json.get("status") == "authenticate":
             self.sid = recv_json.get("sid", INIT_SID)
@@ -382,21 +388,21 @@ class StateMachine:
                              "Sleeping for {} seconds before restart."
                              .format(ERROR_WAIT))
                 time.sleep(ERROR_WAIT)
-                return STATE_INIT
+                return STATE_FAIL
 
             return STATE_AUTH
 
         else:
             logger.error("Get: Unknown status {}".format(recv_json.get("status")))
             time.sleep(ERROR_WAIT)
-            return STATE_INIT
+            return STATE_FAIL
 
     def process_auth(self):
         """ Processing the AUTH state. In this state the application authenticates to
         the Cert-api server. This state may continue with two states:
             GET:  authentication was successful, we can continue to download the
                   new data
-            INIT: there was an error in the authentication process
+            FAIL: there was an error in the authentication process
         """
         # we do not save a signature to a member as we won't use it anymore
         try:
@@ -404,7 +410,7 @@ class StateMachine:
         except CertgenError as e:
             logger.error("{}. Sleeping for {} seconds before restart.".format(e, ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return "INIT"
+            return STATE_FAIL
 
         recv_json = self.send_auth(signature)
 
@@ -420,19 +426,19 @@ class StateMachine:
                          "Sleeping for {} seconds before restart."
                          .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return STATE_INIT
+            return STATE_FAIL
 
         elif recv_json.get("status") == "fail":
             logger.error("Auth Fail. The server responded with the message: '{}'. "
                          "Sleeping for {} seconds before restart."
                          .format(recv_json.get("message"), ERROR_WAIT))
             time.sleep(ERROR_WAIT)
-            return STATE_INIT
+            return STATE_FAIL
 
         else:
             logger.error("Auth: Unknown status {}".format(recv_json.get("status")))
             time.sleep(ERROR_WAIT)
-            return STATE_INIT
+            return STATE_FAIL
 
     def action_spec_init(self):
         """ Execute an action-specific processes at the beginning of the INIT
@@ -470,6 +476,16 @@ class StateMachine:
             elif state == STATE_VALID:  # final state
                 logger.debug("---> VALID state")
                 return
+
+            elif state == STATE_FAIL:  # retry or exit
+                logger.debug("---> FAIL state")
+                self.tries += 1
+                if self.tries >= self.max_tries:
+                    logger.error("Max tries (%d) have been reached, exiting", self.max_tries)
+                    return
+                else:
+                    logger.warning("Retrying... (try number %d)", self.tries + 1)
+                    state = STATE_INIT
 
             else:
                 logger.critical("Unknown next state %s", state)
@@ -559,10 +575,10 @@ class CertMachine(StateMachine):
         """ Process data acquired from last get request and return the desired
             next state.
             This function may return on of the three next states:
-            INIT: * when a valid certificate is downloaded and saved (init must
-                    check consistency of the certificate file)
-                  * the received certificate is not valid or some other error
-                    occurred
+            INIT: when a valid certificate is downloaded and saved (init must
+                  check consistency of the certificate file)
+            FAIL: the received certificate is not valid or some other error
+                  occurred
             GET:  the certs sn does not match - old cert still in cache, we have
                   to wait
         """
@@ -578,7 +594,7 @@ class CertMachine(StateMachine):
                 return STATE_GET
         else:
             logger.error("Obtained cert key does not match.")
-            return STATE_INIT
+            return STATE_FAIL
 
 
 def secret_ok(secret):
@@ -637,7 +653,7 @@ class MailpassMachine(StateMachine):
                 exit()
             return STATE_INIT
         logger.debug("Obtained secret is invalid")
-        return STATE_INIT
+        return STATE_FAIL
 
 
 def setup_logger(verbose):
