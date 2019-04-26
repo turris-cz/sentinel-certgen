@@ -301,7 +301,7 @@ class StateMachine:
         except (json.decoder.JSONDecodeError, AttributeError,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.SSLError) as e:
-            logger.error("Sending request failed with {}".format(e))
+            logger.error("Sending request failed with %s", str(e))
             # TODO Handle properly using exception propagation
             return {}
 
@@ -364,31 +364,41 @@ class StateMachine:
             return self.process_get_response(recv_json)
 
         elif recv_json.get("status") == "wait":
-            logger.debug("Sleeping for {} seconds".format(recv_json.get("delay", RENEW_WAIT)))
+            logger.debug(
+                    "Sleeping for %s seconds",
+                    recv_json.get("delay", RENEW_WAIT)
+            )
             time.sleep(recv_json.get("delay", RENEW_WAIT))
             return STATE_GET
 
         elif recv_json.get("status") == "error":
-            logger.error("Get Error. The server responded with the message: '{}'. "
-                         .format(recv_json.get("message")))
+            logger.error(
+                    "Get error: The server responded with message: %s",
+                    recv_json.get("message")
+            )
             return STATE_FAIL
 
         elif recv_json.get("status") == "fail":
-            logger.error("Get Fail. The server responded with the message: '{}'. "
-                         .format(recv_json.get("message")))
+            logger.error(
+                    "Get fail: Server responded with message: %s",
+                    recv_json.get("message")
+            )
             return STATE_FAIL
 
         elif recv_json.get("status") == "authenticate":
             self.sid = recv_json.get("sid", INIT_SID)
             self.nonce = recv_json.get("nonce", INIT_NONCE)
-            if (self.sid == INIT_SID or self.nonce == INIT_NONCE):
-                logger.error("Received 'sid' or 'nonce' invalid or missing")
+            if (self.sid == INIT_SID):
+                logger.error("Received 'sid' is invalid or missing")
+                return STATE_FAIL
+            if (self.nonce == INIT_NONCE):
+                logger.error("Received 'nonce' is invalid or missing")
                 return STATE_FAIL
 
             return STATE_AUTH
 
         else:
-            logger.error("Get: Unknown status {}".format(recv_json.get("status")))
+            logger.error("Get: Unknown status: %s", recv_json.get("status"))
             return STATE_FAIL
 
     def process_auth(self):
@@ -402,30 +412,36 @@ class StateMachine:
         try:
             signature = get_signature(self.nonce)
         except CertgenError as e:
-            logger.error("{}.".format(e))
+            logger.error(str(e))
             return STATE_FAIL
 
         recv_json = self.send_auth(signature)
 
         if recv_json.get("status") == "accepted":
             self.remove_flag_renew()
-            logger.debug("Auth accepted, sleeping for {} sec."
-                         .format(recv_json.get("delay", RENEW_WAIT)))
+            logger.debug(
+                    "Auth accepted, sleeping for %s sec",
+                    recv_json.get("delay", RENEW_WAIT)
+            )
             time.sleep(recv_json.get("delay", RENEW_WAIT))
             return STATE_GET
 
         elif recv_json.get("status") == "error":
-            logger.error("Auth Error. The server responded with the message: '{}'. "
-                         .format(recv_json.get("message")))
+            logger.error(
+                    "Auth error: Server responded with message: %s",
+                    recv_json.get("message")
+            )
             return STATE_FAIL
 
         elif recv_json.get("status") == "fail":
-            logger.error("Auth Fail. The server responded with the message: '{}'. "
-                         .format(recv_json.get("message"))
+            logger.error(
+                    "Auth fail: Server responded with message: '%s'",
+                    recv_json.get("message")
+            )
             return STATE_FAIL
 
         else:
-            logger.error("Auth: Unknown status {}".format(recv_json.get("status")))
+            logger.error("Auth: Unknown status %s", recv_json.get("status"))
             return STATE_FAIL
 
     def action_spec_init(self):
@@ -582,7 +598,10 @@ class CertMachine(StateMachine):
                 save_cert(cert, self.cert_path)
                 return STATE_INIT
             else:
-                logger.debug("New cert not yet available.  Sleeping for {} seconds".format(RENEW_WAIT))
+                logger.debug(
+                        "New cert is not available yet. Sleeping for %d seconds",
+                        RENEW_WAIT
+                )
                 time.sleep(RENEW_WAIT)
                 return STATE_GET
         else:
@@ -621,14 +640,18 @@ class MailpassMachine(StateMachine):
         except (ValueError, AssertionError):
             logger.info("Secret is inconsistent. Removing...")
         except PermissionError:
-            logger.critical("Can't read from the selected file '{}' - "
-                            "permission denied".format(self.filename))
+            logger.critical(
+                    "Can not read from file file '%s': permission denied",
+                    self.filename
+            )
             sys.exit(EXIT_RC_PERMISSION)
         try:
             os.remove(self.filename)
         except PermissionError:
-            logger.critical("Can't remove the selected file '{}' - "
-                            "permission denied".format(self.filename))
+            logger.critical(
+                    "Can not remove file '%s': permission denied",
+                    self.filename
+            )
             sys.exit(EXIT_RC_PERMISSION)
         return STATE_GET
 
@@ -641,8 +664,10 @@ class MailpassMachine(StateMachine):
                 with open(self.filename, "w") as f:
                     f.write(response.get("secret"))
             except PermissionError:
-                logger.critical("Can't write to the selected file '{}' - "
-                                "permission denied".format(self.filename))
+                logger.critical(
+                        "Can not write to file file '%s': permission denied",
+                        self.filename
+                )
                 sys.exit(EXIT_RC_PERMISSION)
             return STATE_INIT
         logger.debug("Obtained secret is invalid")
