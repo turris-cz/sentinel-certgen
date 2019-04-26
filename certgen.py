@@ -370,33 +370,25 @@ class StateMachine:
 
         elif recv_json.get("status") == "error":
             logger.error("Get Error. The server responded with the message: '{}'. "
-                         "Sleeping for {} seconds before restart."
-                         .format(recv_json.get("message"), ERROR_WAIT))
-            time.sleep(ERROR_WAIT)
+                         .format(recv_json.get("message")))
             return STATE_FAIL
 
         elif recv_json.get("status") == "fail":
             logger.error("Get Fail. The server responded with the message: '{}'. "
-                         "Sleeping for {} seconds before restart."
-                         .format(recv_json.get("message"), ERROR_WAIT))
-            time.sleep(ERROR_WAIT)
+                         .format(recv_json.get("message")))
             return STATE_FAIL
 
         elif recv_json.get("status") == "authenticate":
             self.sid = recv_json.get("sid", INIT_SID)
             self.nonce = recv_json.get("nonce", INIT_NONCE)
             if (self.sid == INIT_SID or self.nonce == INIT_NONCE):
-                logger.error("Received 'sid' or 'nonce' invalid or missing. "
-                             "Sleeping for {} seconds before restart."
-                             .format(ERROR_WAIT))
-                time.sleep(ERROR_WAIT)
+                logger.error("Received 'sid' or 'nonce' invalid or missing")
                 return STATE_FAIL
 
             return STATE_AUTH
 
         else:
             logger.error("Get: Unknown status {}".format(recv_json.get("status")))
-            time.sleep(ERROR_WAIT)
             return STATE_FAIL
 
     def process_auth(self):
@@ -410,8 +402,7 @@ class StateMachine:
         try:
             signature = get_signature(self.nonce)
         except CertgenError as e:
-            logger.error("{}. Sleeping for {} seconds before restart.".format(e, ERROR_WAIT))
-            time.sleep(ERROR_WAIT)
+            logger.error("{}.".format(e))
             return STATE_FAIL
 
         recv_json = self.send_auth(signature)
@@ -425,21 +416,16 @@ class StateMachine:
 
         elif recv_json.get("status") == "error":
             logger.error("Auth Error. The server responded with the message: '{}'. "
-                         "Sleeping for {} seconds before restart."
-                         .format(recv_json.get("message"), ERROR_WAIT))
-            time.sleep(ERROR_WAIT)
+                         .format(recv_json.get("message")))
             return STATE_FAIL
 
         elif recv_json.get("status") == "fail":
             logger.error("Auth Fail. The server responded with the message: '{}'. "
-                         "Sleeping for {} seconds before restart."
-                         .format(recv_json.get("message"), ERROR_WAIT))
-            time.sleep(ERROR_WAIT)
+                         .format(recv_json.get("message"))
             return STATE_FAIL
 
         else:
             logger.error("Auth: Unknown status {}".format(recv_json.get("status")))
-            time.sleep(ERROR_WAIT)
             return STATE_FAIL
 
     def action_spec_init(self):
@@ -486,7 +472,12 @@ class StateMachine:
                     logger.error("Max tries (%d) have been reached, exiting", self.max_tries)
                     return EXIT_RC_MAX_TRIES
                 else:
-                    logger.warning("Retrying... (try number %d)", self.tries + 1)
+                    logger.warning(
+                            "Sleeping for %d seconds before retry (try number %d)",
+                            ERROR_WAIT,
+                            self.tries + 1
+                    )
+                    time.sleep(ERROR_WAIT)
                     state = STATE_INIT
 
             else:
