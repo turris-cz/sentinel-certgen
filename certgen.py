@@ -19,6 +19,7 @@
 import datetime
 import time
 import os
+import sys
 import subprocess
 import argparse
 import logging
@@ -44,6 +45,9 @@ INIT_NONCE = None
 INIT_SID = ""
 
 DEFAULT_MAX_TRIES = 3
+
+EXIT_RC_PERMISSION = 2
+EXIT_RC_MAX_TRIES = 3
 
 # States used in the state machine
 STATE_INIT = "INIT"
@@ -275,8 +279,6 @@ class StateMachine:
         self.tries = 0
         self.max_tries = DEFAULT_MAX_TRIES
 
-        self.start()
-
     @property
     def ROUTE(self):
         """ Get cert-api action route
@@ -475,14 +477,14 @@ class StateMachine:
 
             elif state == STATE_VALID:  # final state
                 logger.debug("---> VALID state")
-                return
+                return 0
 
             elif state == STATE_FAIL:  # retry or exit
                 logger.debug("---> FAIL state")
                 self.tries += 1
                 if self.tries >= self.max_tries:
                     logger.error("Max tries (%d) have been reached, exiting", self.max_tries)
-                    return
+                    return EXIT_RC_MAX_TRIES
                 else:
                     logger.warning("Retrying... (try number %d)", self.tries + 1)
                     state = STATE_INIT
@@ -630,13 +632,13 @@ class MailpassMachine(StateMachine):
         except PermissionError:
             logger.critical("Can't read from the selected file '{}' - "
                             "permission denied".format(self.filename))
-            exit()
+            sys.exit(EXIT_RC_PERMISSION)
         try:
             os.remove(self.filename)
         except PermissionError:
             logger.critical("Can't remove the selected file '{}' - "
                             "permission denied".format(self.filename))
-            exit()
+            sys.exit(EXIT_RC_PERMISSION)
         return STATE_GET
 
     def process_get_response(self, response):
@@ -650,7 +652,7 @@ class MailpassMachine(StateMachine):
             except PermissionError:
                 logger.critical("Can't write to the selected file '{}' - "
                                 "permission denied".format(self.filename))
-                exit()
+                sys.exit(EXIT_RC_PERMISSION)
             return STATE_INIT
         logger.debug("Obtained secret is invalid")
         return STATE_FAIL
@@ -709,13 +711,21 @@ def main():
                 os.remove(csr_path)
             flags.add("renew")
 
-        CertMachine(key_path, csr_path, cert_path, ca_path, sn, api_url, flags,
-                    auth_type, args.insecure_connection)
+        machine = CertMachine(
+                key_path, csr_path, cert_path, ca_path, sn, api_url, flags,
+                auth_type, args.insecure_connection
+        )
 
     elif args.command == "mailpass":
         flags = set()
-        MailpassMachine(args.filename, ca_path, sn, api_url, flags,
-                        auth_type, args.insecure_connection)
+        machine = MailpassMachine(
+                args.filename, ca_path, sn, api_url, flags,
+                auth_type, args.insecure_connection
+        )
+
+    # run StateMachine
+    rc = machine.start()
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
