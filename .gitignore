@@ -1,3 +1,11 @@
+## .gitignore
+
+# Python cache files and directories
+*.pyc
+__pycache__
+*.egg-info/
+
+# keys and certificates (for sure)
 **.pem
 **.csr
 **.key
