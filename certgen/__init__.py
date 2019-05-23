@@ -2,7 +2,7 @@
 Sentinel:Certgen python package
 """
 
-__version__ = '4.2'
+__version__ = '5.0'
 
 
 DEFAULT_CERT_API_HOSTNAME = "sentinel.turris.cz"
