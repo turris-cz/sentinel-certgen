@@ -4,7 +4,7 @@ An argument parser for Sentinel:Certgen
 
 import argparse
 
-from . import DEFAULT_CERT_API_HOSTNAME, DEFAULT_CERT_API_PORT, DEFAULT_CERTS_CERTDIR, DEFAULT_MAILPASS_FILENAME
+from . import __version__, DEFAULT_CERT_API_HOSTNAME, DEFAULT_CERT_API_PORT, DEFAULT_CERTS_CERTDIR, DEFAULT_MAILPASS_FILENAME
 
 
 def get_arg_parser():
@@ -39,6 +39,11 @@ def get_arg_parser():
 
     parser = argparse.ArgumentParser(
             description="Certgen - client for retrieving secrets and certs via Turris:Sentinel"
+    )
+    parser.add_argument(
+            "--version",
+            action="version",
+            version="%(prog)s {}".format(__version__)
     )
 
     subparsers = parser.add_subparsers()
