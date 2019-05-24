@@ -27,13 +27,14 @@ logger = logging.getLogger("certgen")
 
 
 class StateMachine:
-    def __init__(self, ca_path, sn, api_url, flags, auth_type, insecure_conn):
-        self.ca_path = ca_path
+    def __init__(self, sn, auth_type, flags, api_url, ca_path, insecure_conn):
         self.sn = sn
-        self.api_url = api_url
-        self.flags = flags
         self.auth_type = auth_type
+        self.flags = flags
+        self.api_url = api_url
+        self.ca_path = ca_path
         self.use_tls = not insecure_conn
+
         self.tries = 0
         self.max_tries = DEFAULT_MAX_TRIES
 

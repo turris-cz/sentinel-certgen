@@ -53,15 +53,15 @@ def main():
             flags.add("renew")
 
         machine = CertMachine(
-                key_path, csr_path, cert_path, ca_path, sn, api_url, flags,
-                auth_type, args.insecure_connection
+                key_path, csr_path, cert_path,
+                sn, auth_type, flags, api_url, ca_path, args.insecure_connection
         )
 
     elif args.command == "mailpass":
         flags = set()
         machine = MailpassMachine(
-                args.filename, ca_path, sn, api_url, flags,
-                auth_type, args.insecure_connection
+                args.filename,
+                sn, auth_type, flags, api_url, ca_path, args.insecure_connection
         )
 
     # run StateMachine

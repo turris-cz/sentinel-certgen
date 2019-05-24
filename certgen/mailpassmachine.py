@@ -21,9 +21,9 @@ def secret_ok(secret):
 
 
 class MailpassMachine(StateMachine):
-    def __init__(self, filename, ca_path, sn, api_url, flags, auth_type, ic):
+    def __init__(self, filename, sn, auth_type, flags, api_url, ca_path, ic):
         self.filename = filename
-        super().__init__(ca_path, sn, api_url, flags, auth_type, ic)
+        super().__init__(sn, auth_type, flags, api_url, ca_path, ic)
 
     @property
     def ROUTE(self):

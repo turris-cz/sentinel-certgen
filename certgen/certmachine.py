@@ -20,13 +20,13 @@ logger = logging.getLogger("certgen")
 
 class CertMachine(StateMachine):
     def __init__(
-            self, key_path, csr_path, cert_path, ca_path,
-            sn, api_url, flags, auth_type, ic
+            self, key_path, csr_path, cert_path,
+            sn, auth_type, flags, api_url, ca_path, ic
     ):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
-        super().__init__(ca_path, sn, api_url, flags, auth_type, ic)
+        super().__init__(sn, auth_type, flags, api_url, ca_path, ic)
 
     @property
     def ROUTE(self):
