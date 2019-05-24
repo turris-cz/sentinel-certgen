@@ -9,8 +9,10 @@ from cryptography.hazmat.primitives import serialization
 
 from .cryptography import cert_expired, cert_to_expire, extract_cert, generate_csr_file, generate_priv_key_file, load_or_remove_cert, load_or_remove_key, load_or_remove_csr, save_cert
 from .exceptions import CertgenError
+from .hooks import run_hooks
 from .statemachine import StateMachine
 
+from . import HOOKS_DIR
 from .statemachine import STATE_INIT, STATE_GET, STATE_VALID, STATE_WAIT, STATE_FAIL
 
 logger = logging.getLogger("certgen")
@@ -24,6 +26,7 @@ class CertMachine(StateMachine):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
+        self.hooks_path = HOOKS_DIR
         super().__init__(sn, auth_type, flags, api_url, ca_path, ic)
 
     @property
@@ -127,4 +130,9 @@ class CertMachine(StateMachine):
 
         logger.info("New certificate successfully downloaded.")
         save_cert(cert, self.cert_path)
+
+        if self.hooks_path:
+            logger.info("Running hooks from %s", self.hooks_path)
+            run_hooks(hooks_path)
+
         return STATE_INIT

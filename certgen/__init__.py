@@ -10,6 +10,8 @@ DEFAULT_CERT_API_PORT = "443"
 DEFAULT_CERTS_CERTDIR = "/etc/sentinel"
 DEFAULT_MAILPASS_FILENAME = "/etc/sentinel/mailpass"
 
+HOOKS_DIR = "/etc/certgen-hooks.d"
+
 MQTT_KEY_FILE = "mqtt_key.pem"
 MQTT_CERT_FILE = "mqtt_cert.pem"
 MQTT_CSR_FILE = "mqtt_csr.pem"
