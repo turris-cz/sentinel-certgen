@@ -12,7 +12,7 @@ from .exceptions import CertgenError
 from .hooks import run_hooks
 from .statemachine import StateMachine
 
-from . import HOOKS_DIR
+from . import EXIT_RC_HOOKS, HOOKS_DIR
 from .statemachine import STATE_INIT, STATE_GET, STATE_VALID, STATE_WAIT, STATE_FAIL
 
 logger = logging.getLogger("certgen")
@@ -133,6 +133,7 @@ class CertMachine(StateMachine):
 
         if self.hooks_path:
             logger.info("Running hooks from %s", self.hooks_path)
-            run_hooks(hooks_path)
+            if not run_hooks(self.hooks_path):
+                self.rc = EXIT_RC_HOOKS
 
         return STATE_INIT

@@ -44,6 +44,9 @@ class StateMachine:
         self.tries = 0
         self.max_tries = DEFAULT_MAX_TRIES
 
+        # return code from valid state
+        self.rc = 0
+
     @property
     def delay(self):
         return self._delay
@@ -303,7 +306,7 @@ class StateMachine:
             # final state
             elif state == STATE_VALID:
                 logger.debug("---> VALID state")
-                return 0
+                return self.rc
 
             # transitional state for GET with the delay
             elif state == STATE_WAIT:
