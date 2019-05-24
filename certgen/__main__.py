@@ -14,7 +14,7 @@ from .logging import setup_logger
 from .certmachine import CertMachine
 from .mailpassmachine import MailpassMachine
 
-from . import EXIT_RC_SETUP, MQTT_CSR_FILE, MQTT_CERT_FILE, MQTT_KEY_FILE
+from . import EXIT_RC_USAGE, EXIT_RC_SETUP, MQTT_CSR_FILE, MQTT_CERT_FILE, MQTT_KEY_FILE
 
 logger = logging.getLogger("certgen")
 
@@ -53,7 +53,7 @@ def main():
             flags.add("renew")
 
         machine = CertMachine(
-                key_path, csr_path, cert_path,
+                key_path, csr_path, cert_path, args.hooks_dir,
                 sn, auth_type, flags, api_url, ca_path, args.insecure_connection
         )
 

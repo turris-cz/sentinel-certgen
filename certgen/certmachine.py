@@ -12,7 +12,7 @@ from .exceptions import CertgenError
 from .hooks import run_hooks
 from .statemachine import StateMachine
 
-from . import EXIT_RC_HOOKS, HOOKS_DIR
+from . import EXIT_RC_HOOKS
 from .statemachine import STATE_INIT, STATE_GET, STATE_VALID, STATE_WAIT, STATE_FAIL
 
 logger = logging.getLogger("certgen")
@@ -20,13 +20,13 @@ logger = logging.getLogger("certgen")
 
 class CertMachine(StateMachine):
     def __init__(
-            self, key_path, csr_path, cert_path,
+            self, key_path, csr_path, cert_path, hooks_path,
             sn, auth_type, flags, api_url, ca_path, ic
     ):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
-        self.hooks_path = HOOKS_DIR
+        self.hooks_path = hooks_path
         super().__init__(sn, auth_type, flags, api_url, ca_path, ic)
 
     @property

@@ -3,8 +3,22 @@ An argument parser for Sentinel:Certgen
 """
 
 import argparse
+import os
 
 from . import __version__, DEFAULT_CERT_API_HOSTNAME, DEFAULT_CERT_API_PORT, DEFAULT_CERTS_CERTDIR, DEFAULT_MAILPASS_FILENAME
+
+
+class StoreReadableDir(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if (os.path.isdir(values)
+                and os.access(values, os.R_OK)
+                and os.access(values, os.X_OK)):
+            setattr(namespace, self.dest, values)
+        else:
+            raise argparse.ArgumentError(
+                    self,
+                    "Path {} is not a readable directory".format(values)
+            )
 
 
 def get_arg_parser():
@@ -70,6 +84,11 @@ def get_arg_parser():
             "-n", "--renew",
             action="store_true",
             help="Ask Sentinel:Cert-Api for a new certificate and reuse the existing key"
+    )
+    sub.add_argument(
+            "--hooks-dir",
+            action=StoreReadableDir,
+            help="Configure hooks directory path (executable files within this directory would be executed if the certificate was issued)"
     )
 
     # MAILPASS
