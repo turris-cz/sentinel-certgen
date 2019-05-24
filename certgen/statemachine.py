@@ -11,7 +11,8 @@ import requests
 from .crypto_wrapper import get_signature
 from .exceptions import CertgenError, CertgenRequestError
 
-from . import API_VERSION, RENEW_WAIT, ERROR_WAIT, DEFAULT_MAX_TRIES, EXIT_RC_MAX_TRIES
+from . import DELAY_ERROR, DELAY_WAIT_DEFAULT, DELAY_WAIT_MIN, DELAY_WAIT_MAX
+from . import API_VERSION, DEFAULT_MAX_TRIES, EXIT_RC_MAX_TRIES
 
 # States used in the state machine
 STATE_INIT = "INIT"
@@ -35,8 +36,38 @@ class StateMachine:
         self.ca_path = ca_path
         self.use_tls = not insecure_conn
 
+        # call delay setter with default value
+        self.delay = None
         self.tries = 0
         self.max_tries = DEFAULT_MAX_TRIES
+
+    @property
+    def delay(self):
+        return self._delay
+
+    @delay.setter
+    def delay(self, delay):
+        if delay is None:
+            self._delay = DELAY_WAIT_DEFAULT
+
+        elif delay < DELAY_WAIT_MIN:
+            logger.warning(
+                    "Server sends low delay interval %s; Forcing to %s",
+                    delay,
+                    DELAY_WAIT_MIN
+            )
+            self._delay = DELAY_WAIT_MIN
+
+        elif delay > DELAY_WAIT_MAX:
+            logger.warning(
+                    "Server sends high delay interval %s; Forced to %s",
+                    delay,
+                    DELAY_WAIT_MAX
+            )
+            self._delay = DELAY_WAIT_MAX
+
+        else:
+            self._delay = delay
 
     @property
     def ROUTE(self):
@@ -152,11 +183,12 @@ class StateMachine:
             return self.process_get_response(recv_json)
 
         elif recv_json.get("status") == "wait":
+            self.delay = recv_json.get("delay")
             logger.debug(
-                    "Sleeping for %s seconds",
-                    recv_json.get("delay", RENEW_WAIT)
+                    "Server requests to wait, sleeping for %s seconds",
+                    self.delay
             )
-            time.sleep(recv_json.get("delay", RENEW_WAIT))
+            time.sleep(self.delay)
             return STATE_GET
 
         elif recv_json.get("status") == "error":
@@ -208,11 +240,12 @@ class StateMachine:
 
         if recv_json.get("status") == "accepted":
             self.remove_flag_renew()
+            self.delay = recv_json.get("delay")
             logger.debug(
                     "Auth accepted, sleeping for %s sec",
-                    recv_json.get("delay", RENEW_WAIT)
+                    self.delay
             )
-            time.sleep(recv_json.get("delay", RENEW_WAIT))
+            time.sleep(self.delay)
             return STATE_GET
 
         elif recv_json.get("status") == "error":
@@ -289,10 +322,10 @@ class StateMachine:
                     return EXIT_RC_MAX_TRIES
                 logger.warning(
                         "Sleeping for %d seconds before retry (try number %d)",
-                        ERROR_WAIT,
+                        DELAY_ERROR,
                         self.tries + 1
                 )
-                time.sleep(ERROR_WAIT)
+                time.sleep(DELAY_ERROR)
                 state = STATE_INIT
 
             else:
