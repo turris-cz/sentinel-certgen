@@ -119,18 +119,18 @@ class CertMachine(StateMachine):
         """
         # extract & consistency check
         cert = extract_cert(response.get("cert", ""), self.key)
-        if cert:
-            if cert.serial_number != self.cert_sn:
-                logger.info("New certificate successfully downloaded.")
-                save_cert(cert, self.cert_path)
-                return STATE_INIT
-            else:
-                logger.debug(
-                        "New cert is not available yet. Sleeping for %d seconds",
-                        RENEW_WAIT
-                )
-                time.sleep(RENEW_WAIT)
-                return STATE_GET
-        else:
+        if not cert:
             logger.error("Obtained cert key does not match.")
             return STATE_FAIL
+
+        if cert.serial_number == self.cert_sn:
+            logger.debug(
+                    "New cert is not available yet. Sleeping for %d seconds",
+                    RENEW_WAIT
+            )
+            time.sleep(RENEW_WAIT)
+            return STATE_GET
+
+        logger.info("New certificate successfully downloaded.")
+        save_cert(cert, self.cert_path)
+        return STATE_INIT
