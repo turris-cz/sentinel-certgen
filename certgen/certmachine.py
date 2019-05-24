@@ -4,7 +4,6 @@ CertMachine child class definition
 
 import logging
 import os
-import time
 
 from cryptography.hazmat.primitives import serialization
 
@@ -12,7 +11,7 @@ from .cryptography import cert_expired, cert_to_expire, extract_cert, generate_c
 from .exceptions import CertgenError
 from .statemachine import StateMachine
 
-from .statemachine import STATE_INIT, STATE_GET, STATE_VALID, STATE_FAIL
+from .statemachine import STATE_INIT, STATE_GET, STATE_VALID, STATE_WAIT, STATE_FAIL
 
 logger = logging.getLogger("certgen")
 
@@ -113,7 +112,7 @@ class CertMachine(StateMachine):
                     check consistency of the certificate file)
             FAIL:   the received certificate is not valid or some other error
                     occurred
-            GET:    the certs sn does not match - old cert still in cache, we
+            WAIT:   the certs sn does not match - old cert still in cache, we
                     have to wait
         """
         # extract & consistency check
@@ -123,12 +122,8 @@ class CertMachine(StateMachine):
             return STATE_FAIL
 
         if cert.serial_number == self.cert_sn:
-            logger.debug(
-                    "New cert is not available yet. Sleeping for %d seconds",
-                    self.delay
-            )
-            time.sleep(self.delay)
-            return STATE_GET
+            logger.debug("New cert is not available yet")
+            return STATE_WAIT
 
         logger.info("New certificate successfully downloaded.")
         save_cert(cert, self.cert_path)

@@ -19,6 +19,7 @@ STATE_INIT = "INIT"
 STATE_GET = "GET"
 STATE_AUTH = "AUTH"
 STATE_VALID = "VALID"
+STATE_WAIT = "WAIT"
 STATE_FAIL = "FAIL"
 
 INIT_NONCE = None
@@ -169,7 +170,7 @@ class StateMachine:
                     occurred
             AUTH:   when there is no valid data available without
                     authentication
-            GET:    the certification process is still running, we have to wait
+            WAIT:   the certification process is still running, we have to wait
         """
         self.nonce = INIT_NONCE
 
@@ -183,13 +184,9 @@ class StateMachine:
             return self.process_get_response(recv_json)
 
         elif recv_json.get("status") == "wait":
+            logger.debug("Server requests to wait")
             self.delay = recv_json.get("delay")
-            logger.debug(
-                    "Server requests to wait, sleeping for %s seconds",
-                    self.delay
-            )
-            time.sleep(self.delay)
-            return STATE_GET
+            return STATE_WAIT
 
         elif recv_json.get("status") == "error":
             logger.error(
@@ -225,8 +222,8 @@ class StateMachine:
         """
         Processing the AUTH state. In this state the application authenticates
         to the Cert-api server. This state may continue with two states:
-            GET:    authentication was successful, we can continue to download
-                    the new data
+            WAIT:   authentication was successful, we will wait some delay and
+                    continue to download the data
             FAIL:   there was an error in the authentication process
         """
         # we do not save a signature to a member as we won't use it anymore
@@ -239,14 +236,10 @@ class StateMachine:
         recv_json = self.send_auth(signature)
 
         if recv_json.get("status") == "accepted":
-            self.remove_flag_renew()
+            logger.debug("Auth accepted")
             self.delay = recv_json.get("delay")
-            logger.debug(
-                    "Auth accepted, sleeping for %s sec",
-                    self.delay
-            )
-            time.sleep(self.delay)
-            return STATE_GET
+            self.remove_flag_renew()
+            return STATE_WAIT
 
         elif recv_json.get("status") == "error":
             logger.error(
@@ -309,6 +302,13 @@ class StateMachine:
             elif state == STATE_VALID:
                 logger.debug("---> VALID state")
                 return 0
+
+            # transitional state for GET with the delay
+            elif state == STATE_WAIT:
+                logger.debug("---> WAIT state")
+                logger.info("Sleeping for %d seconds", self.delay)
+                time.sleep(self.delay)
+                state = STATE_GET
 
             # retry or exit
             elif state == STATE_FAIL:
