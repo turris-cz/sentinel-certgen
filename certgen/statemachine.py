@@ -12,7 +12,7 @@ from .crypto_wrapper import get_signature
 from .exceptions import CertgenError, CertgenRequestError
 
 from . import DELAY_ERROR, DELAY_WAIT_DEFAULT, DELAY_WAIT_MIN, DELAY_WAIT_MAX
-from . import API_VERSION, DEFAULT_MAX_TRIES, EXIT_RC_MAX_TRIES
+from . import API_VERSION, DEFAULT_MAX_WAITS, DEFAULT_MAX_TRIES, EXIT_RC_MAX_TRIES, EXIT_RC_MAX_WAITS
 
 # States used in the state machine
 STATE_INIT = "INIT"
@@ -39,6 +39,8 @@ class StateMachine:
 
         # call delay setter with default value
         self.delay = None
+        self.waits = 0
+        self.max_waits = DEFAULT_MAX_WAITS
         self.tries = 0
         self.max_tries = DEFAULT_MAX_TRIES
 
@@ -306,6 +308,13 @@ class StateMachine:
             # transitional state for GET with the delay
             elif state == STATE_WAIT:
                 logger.debug("---> WAIT state")
+                self.waits += 1
+                if self.waits >= self.max_waits:
+                    logger.error(
+                            "Max waits (%d) have been reached, exiting",
+                            self.max_waits
+                    )
+                    return EXIT_RC_MAX_WAITS
                 logger.info("Sleeping for %d seconds", self.delay)
                 time.sleep(self.delay)
                 state = STATE_GET
