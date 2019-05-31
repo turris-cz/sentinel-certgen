@@ -78,12 +78,16 @@ def generate_priv_key_file(key_path):
             curve=ELLIPTIC_CURVE,
             backend=default_backend()
     )
+
+    old_umask = os.umask(0o057)
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption()
         ))
+    os.umask(old_umask)
+
 
 
 def key_match(obj, key):
