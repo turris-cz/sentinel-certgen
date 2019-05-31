@@ -5,6 +5,7 @@ Cryptography-related tasks for Sentinel:Certgen
 import datetime
 import logging
 import os
+import stat
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -99,6 +100,22 @@ def load_or_remove_key(key_path):
     Load the private key from a file or, if it is damaged, remove it from
     the filesystem.
     """
+    # check file existence and correct permissions
+    try:
+        st = os.stat(key_path)
+        # private key should *not* has --x-wxrwx
+        if st.st_mode & (stat.S_IXUSR | stat.S_IWGRP | stat.S_IXGRP | stat.S_IRWXO):
+            logger.warning(
+                    "Private key file (%s) has too benevolent permissions",
+                    key_path
+            )
+    except FileNotFoundError:
+        logger.info(
+                "Private key file (%s) is missing",
+                key_path
+        )
+        return None
+
     try:
         with open(key_path, 'rb') as f:
             key = serialization.load_pem_private_key(
