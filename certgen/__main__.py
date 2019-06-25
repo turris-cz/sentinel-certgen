@@ -14,7 +14,7 @@ from .logging import setup_logger
 from .certmachine import CertMachine
 from .mailpassmachine import MailpassMachine
 
-from . import EXIT_RC_USAGE, EXIT_RC_SETUP, MQTT_CSR_FILE, MQTT_CERT_FILE, MQTT_KEY_FILE
+from . import EXIT_RC_SETUP, MQTT_CSR_FILE, MQTT_CERT_FILE, MQTT_KEY_FILE
 
 logger = logging.getLogger("certgen")
 
