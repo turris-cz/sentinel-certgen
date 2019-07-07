@@ -80,7 +80,7 @@ def generate_priv_key_file(key_path):
             backend=default_backend()
     )
 
-    old_umask = os.umask(0o057)
+    old_umask = os.umask(0o027)
     with open(key_path, "wb") as f:
         f.write(key.private_bytes(
             encoding=serialization.Encoding.PEM,
