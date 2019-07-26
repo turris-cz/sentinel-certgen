@@ -23,6 +23,11 @@ def prepare_directory(dirpath):
     os.makedirs(dirpath, exist_ok=True)
 
 
+def prepare_directory_for_file(filepath):
+    dirpath = os.path.dirname(filepath)
+    prepare_directory(dirpath)
+
+
 def main():
     parser = get_arg_parser()
     args = parser.parse_args()
@@ -61,6 +66,8 @@ def main():
         )
 
     elif args.command == "mailpass":
+        prepare_directory_for_file(args.filename)
+
         flags = set()
         machine = MailpassMachine(
                 args.filename,
