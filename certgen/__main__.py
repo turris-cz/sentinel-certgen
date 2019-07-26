@@ -19,6 +19,10 @@ from . import EXIT_RC_SETUP, MQTT_CSR_FILE, MQTT_CERT_FILE, MQTT_KEY_FILE
 logger = logging.getLogger("certgen")
 
 
+def prepare_directory(dirpath):
+    os.makedirs(dirpath, exist_ok=True)
+
+
 def main():
     parser = get_arg_parser()
     args = parser.parse_args()
@@ -36,8 +40,7 @@ def main():
     ca_path = args.capath
 
     if args.command == "certs":
-        if not os.path.exists(args.certdir):
-            os.makedirs(args.certdir)
+        prepare_directory(args.certdir)
 
         key_path = os.path.join(args.certdir, MQTT_KEY_FILE)
         cert_path = os.path.join(args.certdir, MQTT_CERT_FILE)
