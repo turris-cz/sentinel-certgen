@@ -62,7 +62,9 @@ def main():
 
         machine = CertMachine(
                 key_path, csr_path, cert_path, args.hooks_dir,
-                sn, auth_type, flags, api_url, ca_path, args.insecure_connection
+                sn, auth_type, flags, api_url, ca_path,
+                args.insecure_connection,
+                args.skip_renew,
         )
 
     elif args.command == "mailpass":

@@ -21,12 +21,13 @@ logger = logging.getLogger("certgen")
 class CertMachine(StateMachine):
     def __init__(
             self, key_path, csr_path, cert_path, hooks_path,
-            sn, auth_type, flags, api_url, ca_path, ic
+            sn, auth_type, flags, api_url, ca_path, ic, skip_renew
     ):
         self.key_path = key_path
         self.csr_path = csr_path
         self.cert_path = cert_path
         self.hooks_path = hooks_path
+        self.skip_renew = skip_renew
         super().__init__(sn, auth_type, flags, api_url, ca_path, ic)
 
     @property
@@ -91,6 +92,10 @@ class CertMachine(StateMachine):
                         self.cert_sn = cert.serial_number
                     else:
                         return STATE_VALID
+
+        if "renew" in self.flags and self.skip_renew:
+            logger.info("Renew suppressed as requested.")
+            return STATE_VALID
 
         logger.info("Certificate file does not exist or is to be renewed. Re-certifying.")
 

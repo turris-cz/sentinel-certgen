@@ -86,6 +86,14 @@ def get_arg_parser():
             help="Ask Sentinel:Cert-Api for a new certificate and reuse the existing key"
     )
     sub.add_argument(
+            "-s", "--skip-renew",
+            action="store_true",
+            help="In case of renew (due to a valid certificate which is nearly "
+                 "expired or --renew option) do not ask Sentinel:Cert-Api for "
+                 "a new certificate but rather exit in valid state. This "
+                 "is a less-blocking variant designed for upstart."
+    )
+    sub.add_argument(
             "--hooks-dir",
             action=StoreReadableDir,
             help="Configure hooks directory path (executable files within this directory would be executed if the certificate was issued)"
