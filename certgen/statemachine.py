@@ -8,6 +8,8 @@ import time
 
 import requests
 
+from requests.exceptions import RequestException
+
 from .crypto_wrapper import get_signature
 from .exceptions import CertgenError, CertgenRequestError
 
@@ -56,24 +58,36 @@ class StateMachine:
         if delay is None:
             self._delay = DELAY_WAIT_DEFAULT
 
-        elif delay < DELAY_WAIT_MIN:
-            logger.warning(
-                    "Server sends low delay interval %s; Forcing to %s",
-                    delay,
-                    DELAY_WAIT_MIN
-            )
-            self._delay = DELAY_WAIT_MIN
-
-        elif delay > DELAY_WAIT_MAX:
-            logger.warning(
-                    "Server sends high delay interval %s; Forced to %s",
-                    delay,
-                    DELAY_WAIT_MAX
-            )
-            self._delay = DELAY_WAIT_MAX
-
         else:
-            self._delay = delay
+            try:
+                delay = int(delay)
+            except (ValueError, TypeError):
+                logger.warning(
+                        "Server sends non-numeric interval %s; Forcing to %s",
+                        delay,
+                        DELAY_WAIT_MIN
+                )
+                self._delay = DELAY_WAIT_MIN
+                return
+
+            if delay < DELAY_WAIT_MIN:
+                logger.warning(
+                        "Server sends low delay interval %s; Forcing to %s",
+                        delay,
+                        DELAY_WAIT_MIN
+                )
+                self._delay = DELAY_WAIT_MIN
+
+            elif delay > DELAY_WAIT_MAX:
+                logger.warning(
+                        "Server sends high delay interval %s; Forcing to %s",
+                        delay,
+                        DELAY_WAIT_MAX
+                )
+                self._delay = DELAY_WAIT_MAX
+
+            else:
+                self._delay = delay
 
     @property
     def ROUTE(self):
@@ -101,7 +115,8 @@ class StateMachine:
         try:
             response = requests.post(
                     url, headers=headers, data=data,
-                    verify=self.ca_path
+                    verify=self.ca_path,
+                    timeout=REQ_TIMEOUT
             )
             response.raise_for_status()
             return response.json()
@@ -109,14 +124,14 @@ class StateMachine:
         except requests.exceptions.HTTPError as e:
             raise CertgenRequestError(
                     "Server returned HTTP error: {} {}".format(
-                            response.status_code,
-                            response.reason
+                            e.response.status_code,
+                            e.response.reason
                     )
             )
 
         except (json.decoder.JSONDecodeError, AttributeError,
                 requests.exceptions.ConnectionError,
-                requests.exceptions.SSLError) as e:
+                requests.exceptions.SSLError, RequestException) as e:
             raise CertgenRequestError("Sending request failed: {}".format(str(e)))
 
     def send_get(self):
@@ -238,7 +253,11 @@ class StateMachine:
             logger.error(str(e))
             return STATE_FAIL
 
-        recv_json = self.send_auth(signature)
+        try:
+            recv_json = self.send_auth(signature)
+        except CertgenRequestError as e:
+            logger.error(str(e))
+            return STATE_FAIL
 
         if recv_json.get("status") == "accepted":
             logger.debug("Auth accepted")

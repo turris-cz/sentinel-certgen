@@ -21,8 +21,27 @@ def run_hooks(directory_path):
                 and os.access(path, os.R_OK)
                 and os.access(path, os.X_OK)):
             logger.info("Executing hook %s", filename)
-            process = subprocess.Popen([path])
-            rc = process.wait()
+            try:
+                process = subprocess.run(
+                        [path],
+                        timeout=HOOK_TIMEOUT,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                )
+                rc = process.returncode
+
+            except subprocess.TimeoutExpired:
+                logger.error(
+                        "Hook %s timed out after %d seconds",
+                        filename, HOOK_TIMEOUT
+                )
+                return_flag = False
+                continue
+
+            except OSError as e:
+                logger.error("Hook %s failed to start: %s", filename, e)
+                return_flag = False
+                continue
 
             if rc != 0:
                 return_flag = False

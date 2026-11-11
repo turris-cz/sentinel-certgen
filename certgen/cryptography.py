@@ -14,6 +14,8 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 
+from datetime import timezone
+
 from . import MAX_TIME_TO_EXPIRE
 
 ELLIPTIC_CURVE = ec.SECP256R1()
@@ -34,18 +36,18 @@ def clear_cert_dir(key_path, csr_path, cert_path):
         os.remove(cert_path)
 
 
-def cert_expired(cert, csr_path, cert_path):
-    now = datetime.datetime.utcnow()
-    if cert.not_valid_after < now:
+def cert_expired(cert):
+    now = datetime.datetime.now(timezone.utc)
+    if cert.not_valid_after_utc < now:
         return True
     else:
         return False
 
 
 def cert_to_expire(cert):
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(timezone.utc)
     max_time_to_expire = datetime.timedelta(seconds=MAX_TIME_TO_EXPIRE)
-    return cert.not_valid_after < (now + max_time_to_expire)
+    return cert.not_valid_after_utc < (now + max_time_to_expire)
 
 
 def extract_cert(cert_str, key):

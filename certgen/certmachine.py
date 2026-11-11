@@ -74,7 +74,7 @@ class CertMachine(StateMachine):
         if not cert:
             self.cert_sn = None
         else:  # we have a cert
-            if cert_expired(cert, self.csr_path, self.cert_path):
+            if cert_expired(cert):
                 logger.info("Certificate expired. Removing...")
                 if os.path.exists(self.csr_path):
                     os.remove(self.csr_path)

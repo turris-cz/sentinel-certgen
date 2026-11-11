@@ -10,7 +10,7 @@ from .argparser import get_arg_parser
 from .crypto_wrapper import get_sn, get_auth_type
 from .cryptography import clear_cert_dir
 from .exceptions import CertgenError
-from .logging import setup_logger
+from .logger import setup_logger
 from .certmachine import CertMachine
 from .mailpassmachine import MailpassMachine
 

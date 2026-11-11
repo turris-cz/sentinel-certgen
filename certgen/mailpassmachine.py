@@ -69,13 +69,14 @@ class MailpassMachine(StateMachine):
         Process data acquired from last get request and return the desired next
         state
         """
-        if secret_ok(response.get("secret")):
+        if secret_ok(response.get("secret", "")):
             try:
-                with open(self.filename, "w") as f:
+                fd = os.open(self.filename, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
                     f.write(response.get("secret"))
             except PermissionError:
                 logger.critical(
-                        "Can not write to file file '%s': permission denied",
+                        "Can not write to file '%s': permission denied",
                         self.filename
                 )
                 sys.exit(EXIT_RC_PERMISSION)
