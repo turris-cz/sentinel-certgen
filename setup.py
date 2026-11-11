@@ -22,7 +22,7 @@ setup(
         description='Client application for automated passwords and certificates retrieval',
         long_description=get_description('README.md'),
         long_description_content_type='text/markdown',
-        url='https://gitlab.labs.nic.cz/turris/sentinel/certgen',
+        url='https://gitlab.nic.cz/turris/sentinel/certgen',
         author='CZ.NIC, z.s.p.o.',
         author_email='packaging@turris.cz',
         license='GNU GPL v3',
